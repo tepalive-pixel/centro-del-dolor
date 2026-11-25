@@ -19,13 +19,14 @@
 
     <div id="app-container"></div>
     <div id="modals"></div>
+    <div id="image-viewer"></div> <!-- Visor de imágenes a pantalla completa -->
 
     <script type="module">
         // 1. IMPORTAR FIREBASE
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
         import { getFirestore, collection, getDocs, doc, setDoc, updateDoc, onSnapshot, deleteDoc } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
 
-        // TU CONFIGURACIÓN DE FIREBASE (Las claves que me pasaste)
+        // TU CONFIGURACIÓN DE FIREBASE
         const firebaseConfig = {
             apiKey: "AIzaSyDP6H4i0CQWV0mzLW3wz2MKQ2BqB6cBde8",
             authDomain: "clinica-centro-del-dolor.firebaseapp.com",
@@ -85,34 +86,34 @@
                 currentUser = { role: 'admin', name: 'Administrador' };
                 loadData();
             } else {
-                // Aquí iría la lógica para buscar al paciente o terapeuta en la base de datos
                 err.innerText = "Modo paciente en desarrollo. Usa tu acceso Admin.";
                 err.classList.remove('hidden');
                 btn.innerHTML = 'Ingresar al Portal';
             }
         }
 
-        // 3. CARGAR DATOS EN TIEMPO REAL (FIRESTORE)
+        // 3. CARGAR DATOS EN TIEMPO REAL
         function loadData() {
-            // Escuchar Pacientes
             onSnapshot(collection(db, "patients"), (snapshot) => {
                 patients = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                 if(currentUser && currentTab === 'pacientes') renderDashboard();
+                
+                // Actualizar modal de expediente si está abierto
+                const expModalOpen = document.getElementById('exp-modal-id');
+                if(expModalOpen) openExpediente(expModalOpen.value);
             });
 
-            // Escuchar Paquetes
             onSnapshot(collection(db, "packages"), (snapshot) => {
                 packages = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                 if(currentUser && currentTab === 'paquetes') renderDashboard();
             });
 
-            // Escuchar Colaboradores
             onSnapshot(collection(db, "collaborators"), (snapshot) => {
                 collaborators = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                 if(currentUser && currentTab === 'colaboradores') renderDashboard();
             });
 
-            renderDashboard(); // Render inicial
+            renderDashboard();
         }
 
         // 4. INTERFAZ PRINCIPAL (ADMIN)
@@ -170,7 +171,7 @@
             }
         }
 
-        // --- SECCIÓN PACIENTES ---
+        // --- SECCIÓN PACIENTES E HISTORIAL CLÍNICO ---
         function renderPacientes() {
             return `
             <div class="fade-in">
@@ -245,7 +246,7 @@
             
             await setDoc(doc(db, "patients", phone), {
                 name, phone, age, diagnosis: diag, history: hist,
-                sessionsCompleted: 0, sessionsTotal: 1,
+                documents: [], // Arreglo para fotos de recetas/radiografías
                 registeredAt: new Date().toISOString()
             });
             document.getElementById('add-modal').remove();
@@ -254,27 +255,58 @@
         window.openExpediente = function(id) {
             const p = patients.find(x => x.id === id);
             if(!p) return;
+            
+            const pDocs = p.documents || [];
+
             const html = `
             <div id="exp-modal" class="fixed inset-0 bg-black bg-opacity-60 z-50 flex items-center justify-center p-4 fade-in">
-                <div class="bg-white rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl">
-                    <div class="bg-teal-700 p-6 text-white flex justify-between items-center">
+                <input type="hidden" id="exp-modal-id" value="${p.id}">
+                <div class="bg-white rounded-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto shadow-2xl">
+                    <div class="bg-teal-700 p-6 text-white flex justify-between items-center sticky top-0 z-10">
                         <div>
                             <h2 class="text-2xl font-bold">${p.name}</h2>
                             <p class="text-teal-200"><i class="fa-solid fa-phone mr-1"></i> ${p.phone}</p>
                         </div>
-                        <button onclick="document.getElementById('exp-modal').remove()" class="text-white hover:text-red-200 text-xl"><i class="fa-solid fa-times"></i></button>
+                        <button onclick="document.getElementById('exp-modal').remove()" class="text-white hover:text-red-200 text-2xl"><i class="fa-solid fa-times"></i></button>
                     </div>
+                    
                     <div class="p-6 space-y-6">
+                        <!-- Datos Clínicos -->
                         <div class="bg-blue-50 p-4 rounded-lg border border-blue-100">
-                            <h3 class="font-bold text-blue-800 mb-3"><i class="fa-solid fa-notes-medical mr-2"></i>Datos Clínicos</h3>
+                            <h3 class="font-bold text-blue-800 mb-3"><i class="fa-solid fa-notes-medical mr-2"></i>Datos Clínicos Generales</h3>
                             <div class="grid grid-cols-2 gap-4">
                                 <div><p class="text-xs text-blue-600 font-bold uppercase">Edad</p><p class="text-gray-700">${p.age || 'No especificada'}</p></div>
                                 <div><p class="text-xs text-blue-600 font-bold uppercase">Diagnóstico</p><p class="text-gray-700">${p.diagnosis || 'No especificado'}</p></div>
                             </div>
                             <div class="mt-3"><p class="text-xs text-blue-600 font-bold uppercase">Antecedentes</p><p class="text-gray-700 text-sm">${p.history || 'Ninguno registrado'}</p></div>
                         </div>
-                        <div class="text-center pb-2">
-                            <button onclick="document.getElementById('exp-modal').remove()" class="bg-gray-200 text-gray-700 px-6 py-2 rounded-lg font-bold">Cerrar Expediente</button>
+
+                        <!-- Documentos (Recetas y Radiografías) -->
+                        <div class="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                            <div class="flex justify-between items-center mb-4">
+                                <h3 class="font-bold text-gray-800"><i class="fa-solid fa-x-ray mr-2 text-teal-600"></i>Radiografías y Recetas</h3>
+                                
+                                <input type="file" id="file-upload-${p.id}" accept="image/*" class="hidden" onchange="subirDocumentoPaciente(event, '${p.id}')">
+                                <label for="file-upload-${p.id}" id="label-upload-${p.id}" class="cursor-pointer bg-teal-100 text-teal-700 px-4 py-2 rounded-lg font-semibold text-sm hover:bg-teal-200 transition">
+                                    <i class="fa-solid fa-cloud-arrow-up mr-1"></i> Añadir Foto
+                                </label>
+                            </div>
+                            
+                            <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                                ${pDocs.length === 0 ? `<p class="col-span-full text-gray-400 text-sm text-center py-4">No hay documentos guardados</p>` : ''}
+                                ${pDocs.map((docImg, idx) => `
+                                    <div class="relative group rounded-lg overflow-hidden border-2 border-gray-200 shadow-sm aspect-square bg-white flex items-center justify-center">
+                                        <img src="${docImg.url}" class="w-full h-full object-cover cursor-pointer hover:opacity-75 transition" onclick="verImagenCompleta('${docImg.url}')">
+                                        <button onclick="borrarDocumento('${p.id}', ${idx})" class="absolute top-1 right-1 bg-red-500 text-white rounded-full w-8 h-8 flex items-center justify-center opacity-0 group-hover:opacity-100 transition shadow">
+                                            <i class="fa-solid fa-trash text-sm"></i>
+                                        </button>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+
+                        <div class="text-center pt-4">
+                            <button onclick="document.getElementById('exp-modal').remove()" class="bg-gray-200 text-gray-700 px-8 py-3 rounded-xl font-bold hover:bg-gray-300">Cerrar Expediente</button>
                         </div>
                     </div>
                 </div>
@@ -282,7 +314,73 @@
             document.getElementById('modals').innerHTML = html;
         }
 
-        // --- SECCIÓN COLABORADORES (CON FOTO) ---
+        // COMPRESOR DE IMÁGENES Y SUBIDA
+        window.subirDocumentoPaciente = function(event, patientId) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const labelBtn = document.getElementById(`label-upload-${patientId}`);
+            labelBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Subiendo...';
+            labelBtn.classList.add('opacity-50', 'cursor-not-allowed');
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const img = new Image();
+                img.onload = async function() {
+                    // Comprimir la imagen usando un Canvas
+                    const canvas = document.createElement('canvas');
+                    let width = img.width;
+                    let height = img.height;
+                    const max_size = 800; // Reducir a máximo 800px para que no llene Firebase
+                    
+                    if (width > height && width > max_size) {
+                        height *= max_size / width;
+                        width = max_size;
+                    } else if (height > max_size) {
+                        width *= max_size / height;
+                        height = max_size;
+                    }
+                    
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, width, height);
+                    
+                    // Convertir a texto Base64 comprimido (calidad 70%)
+                    const compressedBase64 = canvas.toDataURL('image/jpeg', 0.7);
+                    
+                    // Guardar en la base de datos
+                    const p = patients.find(x => x.id === patientId);
+                    let docs = p.documents || [];
+                    docs.push({ url: compressedBase64, date: new Date().toISOString() });
+                    
+                    await updateDoc(doc(db, "patients", patientId), { documents: docs });
+                    // No necesitamos recargar el modal manualmente, onSnapshot lo hará automáticamente
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        window.borrarDocumento = async function(patientId, docIndex) {
+            if(confirm("¿Seguro que deseas eliminar esta imagen del historial?")) {
+                const p = patients.find(x => x.id === patientId);
+                let docs = p.documents || [];
+                docs.splice(docIndex, 1); // Quitar imagen del arreglo
+                await updateDoc(doc(db, "patients", patientId), { documents: docs });
+            }
+        }
+
+        window.verImagenCompleta = function(urlBase64) {
+            const html = `
+            <div id="full-image-modal" class="fixed inset-0 bg-black bg-opacity-90 z-[60] flex items-center justify-center p-4 fade-in">
+                <button onclick="document.getElementById('full-image-modal').remove()" class="absolute top-6 right-6 text-white text-4xl hover:text-gray-300"><i class="fa-solid fa-xmark"></i></button>
+                <img src="${urlBase64}" class="max-w-full max-h-full object-contain rounded shadow-2xl">
+            </div>`;
+            document.getElementById('image-viewer').innerHTML = html;
+        }
+
+        // --- SECCIÓN COLABORADORES ---
         function renderColaboradores() {
             return `
             <div class="fade-in">
@@ -313,14 +411,11 @@
                 <div class="bg-white rounded-2xl w-full max-w-md p-6">
                     <h2 class="text-xl font-bold text-gray-800 mb-4">Registrar Terapeuta</h2>
                     <div class="space-y-4 text-sm">
-                        
-                        <!-- Input para la foto -->
                         <div class="flex flex-col items-center justify-center border-2 border-dashed border-gray-300 rounded-lg p-4 bg-gray-50">
                             <i class="fa-solid fa-camera text-3xl text-gray-400 mb-2"></i>
                             <p class="text-gray-500 font-semibold mb-2">Sube una foto de perfil</p>
                             <input type="file" id="colab-photo" accept="image/*" class="text-xs text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-teal-50 file:text-teal-700 hover:file:bg-teal-100">
                         </div>
-
                         <input type="text" id="colab-name" placeholder="Nombre completo" class="w-full p-3 border rounded-lg focus:outline-teal-500">
                         <input type="number" id="colab-phone" placeholder="Celular (Su contraseña de acceso)" class="w-full p-3 border rounded-lg focus:outline-teal-500">
                         <input type="text" id="colab-specialty" placeholder="Especialidad (Ej. Fisioterapeuta)" class="w-full p-3 border rounded-lg focus:outline-teal-500">
@@ -346,14 +441,24 @@
 
             btn.innerText = "Guardando..."; btn.disabled = true;
 
-            // Lógica para convertir la imagen a formato Base64 (Texto)
             let photoBase64 = "";
             if (fileInput.files && fileInput.files[0]) {
                 const file = fileInput.files[0];
                 const reader = new FileReader();
                 reader.onloadend = async function() {
-                    photoBase64 = reader.result; // El texto de la imagen
-                    await saveColabToDb(phone, name, spec, photoBase64);
+                    const img = new Image();
+                    img.onload = async function() {
+                        const canvas = document.createElement('canvas');
+                        let width = img.width, height = img.height;
+                        const max_size = 400; // Fotos de perfil más pequeñas
+                        if (width > height && width > max_size) { height *= max_size / width; width = max_size; }
+                        else if (height > max_size) { width *= max_size / height; height = max_size; }
+                        canvas.width = width; canvas.height = height;
+                        canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+                        photoBase64 = canvas.toDataURL('image/jpeg', 0.7);
+                        await saveColabToDb(phone, name, spec, photoBase64);
+                    }
+                    img.src = reader.result;
                 }
                 reader.readAsDataURL(file);
             } else {
@@ -366,13 +471,13 @@
                 name: name,
                 phone: phone,
                 specialty: spec,
-                photo: photoData, // Aquí se guarda la foto
+                photo: photoData,
                 role: 'therapist'
             });
             document.getElementById('add-colab-modal').remove();
         }
 
-        // --- SECCIÓN PAQUETES (CATÁLOGO REAL) ---
+        // --- SECCIÓN PAQUETES ---
         function renderPaquetes() {
             return `
             <div class="fade-in">
@@ -429,25 +534,22 @@
             
             if(!name || !sessions || !price) return alert("Llena todos los campos.");
             
-            // Generar un ID simple para el paquete
             const pkgId = "PKG-" + Math.floor(Math.random() * 10000);
             
             await setDoc(doc(db, "packages", pkgId), {
-                name,
-                sessions: parseInt(sessions),
-                price: parseFloat(price)
+                name, sessions: parseInt(sessions), price: parseFloat(price)
             });
             document.getElementById('add-pkg-modal').remove();
         }
 
-        // --- SECCIÓN CITAS (BÁSICA POR AHORA) ---
+        // --- SECCIÓN CITAS ---
         function renderCitas() {
             return `
             <div class="fade-in">
                 <h2 class="text-2xl font-bold text-gray-800 mb-6">Agenda de Citas</h2>
                 <div class="bg-white p-8 rounded-xl shadow-sm border border-gray-100 text-center">
                     <i class="fa-regular fa-calendar-check text-5xl text-teal-200 mb-4"></i>
-                    <p class="text-gray-500 mb-4">El calendario de citas se mostrará aquí próximamente.</p>
+                    <p class="text-gray-500 mb-4">El calendario interactivo se configurará en la siguiente fase.</p>
                 </div>
             </div>`;
         }
