@@ -535,6 +535,38 @@
                                 ` : '<p class="text-sm text-gray-500">Sin paquete asignado.</p>'}
                             </div>
 
+                            <!-- Radiografías y Recetas (RECUPERADO) -->
+                            <div class="bg-white p-4 rounded-xl shadow-sm border">
+                                <div class="flex justify-between items-center mb-2">
+                                    <h3 class="font-bold text-gray-700">Radiografías y Recetas</h3>
+                                    ${!isPat ? `<label class="cursor-pointer text-xs bg-teal-100 text-teal-700 px-2 py-1 rounded font-bold">
+                                        <i class="fa-solid fa-upload"></i> Subir
+                                        <input type="file" class="hidden" accept="image/*" onchange="subirDocumento('${p.id}', this)">
+                                    </label>` : ''}
+                                </div>
+                                <div class="grid grid-cols-3 gap-2 mt-2" id="docs-list">
+                                    ${(p.docs||[]).map(d => `<img src="${d}" class="w-full h-20 object-cover rounded cursor-pointer border hover:opacity-75 transition" onclick="verImagen(this.src)">`).join('')}
+                                </div>
+                                ${(!p.docs || p.docs.length === 0) ? '<p class="text-sm text-gray-500">No hay documentos adjuntos.</p>' : ''}
+                            </div>
+
+                            <!-- Ejercicios en Casa / YouTube (RECUPERADO) -->
+                            <div class="bg-white p-4 rounded-xl shadow-sm border">
+                                <div class="flex justify-between items-center mb-2">
+                                    <h3 class="font-bold text-gray-700">Ejercicios Asignados</h3>
+                                    ${!isPat ? `<button onclick="asignarVideo('${p.id}')" class="text-xs bg-teal-100 text-teal-700 px-2 py-1 rounded font-bold"><i class="fa-solid fa-plus"></i> Asignar</button>` : ''}
+                                </div>
+                                <div class="space-y-2 mt-2" id="videos-list">
+                                    ${(p.videos||[]).map(v => `
+                                        <div class="flex items-center justify-between bg-gray-50 p-2 rounded border">
+                                            <a href="${v.url}" target="_blank" class="text-sm text-blue-600 font-semibold hover:underline flex items-center gap-2"><i class="fa-brands fa-youtube text-red-500 text-lg"></i> ${v.title}</a>
+                                            ${!isPat ? `<button onclick="eliminarVideo('${p.id}', '${v.url}')" class="text-red-500 text-xs hover:bg-red-100 p-1 rounded"><i class="fa-solid fa-trash"></i></button>` : ''}
+                                        </div>
+                                    `).join('')}
+                                </div>
+                                ${(!p.videos || p.videos.length === 0) ? '<p class="text-sm text-gray-500">Sin ejercicios asignados.</p>' : ''}
+                            </div>
+
                             <!-- Notas / Diario -->
                             <div class="bg-white p-4 rounded-xl shadow-sm border">
                                 <h3 class="font-bold text-gray-700 mb-2">Notas y Evolución</h3>
@@ -557,6 +589,48 @@
             const p = dbData.pacientes.find(x => x.id === id);
             if(!p.notes) p.notes = [];
             p.notes.push({ text: txt, date: new Date().toLocaleDateString() });
+            await guardarEnBD('pacientes', p, id);
+            abrirExpediente(id);
+        }
+
+        // --- FUNCIONES RECUPERADAS: DOCUMENTOS Y VIDEOS ---
+        function subirDocumento(id, input) {
+            const file = input.files[0];
+            if(!file) return;
+            compressImage(file, async (b64) => {
+                const p = dbData.pacientes.find(x => x.id === id);
+                if(!p.docs) p.docs = [];
+                p.docs.push(b64);
+                await guardarEnBD('pacientes', p, id);
+                abrirExpediente(id);
+            });
+        }
+
+        function verImagen(src) {
+            const modal = document.createElement('div');
+            modal.className = "fixed inset-0 bg-black z-[100] flex justify-center items-center p-2 cursor-pointer";
+            modal.innerHTML = `<img src="${src}" class="max-w-full max-h-full object-contain"><div class="absolute top-4 right-4 text-white text-3xl font-bold">&times;</div>`;
+            modal.onclick = () => modal.remove();
+            document.body.appendChild(modal);
+        }
+
+        async function asignarVideo(id) {
+            const titulo = prompt("Título del Video (Ej. Ejercicios de Hombro):");
+            if(!titulo) return;
+            const url = prompt("Pega el enlace de YouTube:");
+            if(!url) return;
+
+            const p = dbData.pacientes.find(x => x.id === id);
+            if(!p.videos) p.videos = [];
+            p.videos.push({ title: titulo, url: url });
+            await guardarEnBD('pacientes', p, id);
+            abrirExpediente(id);
+        }
+
+        async function eliminarVideo(id, url) {
+            if(!confirm("¿Eliminar este video?")) return;
+            const p = dbData.pacientes.find(x => x.id === id);
+            p.videos = p.videos.filter(v => v.url !== url);
             await guardarEnBD('pacientes', p, id);
             abrirExpediente(id);
         }
