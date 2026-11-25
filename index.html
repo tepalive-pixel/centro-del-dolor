@@ -1,0 +1,769 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Centro del Dolor</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        .fade-in { animation: fadeIn 0.3s ease-in-out; }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 10px; }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800 font-sans h-screen flex overflow-hidden">
+
+    <!-- PANTALLA DE CARGA INICIAL -->
+    <div id="loading-screen" class="fixed inset-0 bg-white z-50 flex flex-col items-center justify-center">
+        <i class="fa-solid fa-circle-notch fa-spin text-teal-600 text-5xl mb-4"></i>
+        <h2 class="text-xl font-bold text-teal-800">Conectando a la nube...</h2>
+        <p class="text-gray-500 mt-2">Sincronizando base de datos</p>
+    </div>
+
+    <!-- PANTALLA DE LOGIN -->
+    <div id="login-screen" class="fixed inset-0 bg-teal-700 z-40 flex items-center justify-center hidden">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md p-8 m-4 fade-in text-center">
+            <img src="image_1027ac.jpg" alt="Centro del Dolor Logo" class="w-40 mx-auto mb-6 rounded-lg object-contain" onerror="this.src='https://placehold.co/400x400/0f766e/white?text=Centro+del+Dolor'">
+            <h2 class="text-2xl font-bold text-gray-800 mb-2">Bienvenido</h2>
+            <p class="text-gray-500 mb-6">Ingresa tu número celular para acceder</p>
+            
+            <input type="text" id="login-phone" placeholder="Ej. 5512345678" class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-teal-500 mb-4 text-center text-lg font-semibold">
+            
+            <button onclick="handleLogin()" class="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold py-3 rounded-lg transition shadow-lg">
+                Ingresar al Portal
+            </button>
+            
+            <div class="mt-6 text-sm text-gray-400 text-left bg-gray-50 p-4 rounded-lg">
+                <p><strong>Accesos Demo:</strong></p>
+                <p>Admin: <span class="font-mono text-teal-600">admin</span></p>
+                <p>Pacientes / Terapeutas: Usa sus números de celular registrados.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- MAIN APP CONTAINER -->
+    <div id="app-container" class="flex w-full h-full hidden">
+        
+        <!-- SIDEBAR (Admin / Therapist) -->
+        <aside id="sidebar" class="w-64 bg-white shadow-xl flex-col hidden md:flex z-20">
+            <div class="p-6 border-b border-gray-100 text-center">
+                <img src="image_1027ac.jpg" alt="Logo" class="w-24 mx-auto mb-2 rounded" onerror="this.src='https://placehold.co/200x200/0f766e/white?text=CD'">
+                <h1 class="font-bold text-teal-800 text-lg leading-tight">Centro del Dolor</h1>
+                <p class="text-xs text-gray-500 mt-1">Movimiento es Vida</p>
+            </div>
+            
+            <nav class="flex-1 p-4 space-y-2 overflow-y-auto" id="nav-menu">
+                <!-- Menu items injected via JS based on role -->
+            </nav>
+            
+            <div class="p-4 border-t border-gray-100">
+                <div class="flex items-center gap-3 mb-4 px-2">
+                    <div class="w-10 h-10 rounded-full bg-teal-100 flex items-center justify-center text-teal-700 font-bold">
+                        <i class="fa-solid fa-user"></i>
+                    </div>
+                    <div>
+                        <p class="font-semibold text-sm truncate w-32" id="user-display-name">Usuario</p>
+                        <p class="text-xs text-gray-500" id="user-display-role">Rol</p>
+                    </div>
+                </div>
+                <button onclick="logout()" class="w-full py-2 text-red-500 hover:bg-red-50 rounded-lg transition flex items-center justify-center gap-2 text-sm font-semibold">
+                    <i class="fa-solid fa-sign-out-alt"></i> Cerrar Sesión
+                </button>
+            </div>
+        </aside>
+
+        <!-- CONTENT AREA -->
+        <main class="flex-1 flex flex-col h-full bg-gray-50 overflow-hidden relative">
+            
+            <!-- Mobile Header -->
+            <header class="md:hidden bg-white shadow-sm p-4 flex justify-between items-center z-10">
+                <div class="flex items-center gap-2">
+                    <img src="image_1027ac.jpg" alt="Logo" class="w-8 h-8 rounded" onerror="this.src='https://placehold.co/100/0f766e/white'">
+                    <span class="font-bold text-teal-800 truncate">Centro del Dolor</span>
+                </div>
+                <button onclick="toggleMobileMenu()" class="text-gray-600 text-2xl">
+                    <i class="fa-solid fa-bars"></i>
+                </button>
+            </header>
+
+            <!-- Views Container -->
+            <div id="views-container" class="flex-1 overflow-y-auto p-4 md:p-8">
+                <!-- Contenido inyectado por JS -->
+            </div>
+            
+        </main>
+    </div>
+
+    <!-- MODALS CONTAINER -->
+    <div id="modals"></div>
+
+    <!-- FIREBASE & LOGIC -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
+        import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js";
+        import { getFirestore, collection, doc, getDocs, setDoc, updateDoc, addDoc, onSnapshot, deleteDoc } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+
+        // CONFIGURACIÓN DE TU BASE DE DATOS FIREBASE
+        const firebaseConfig = {
+            apiKey: "AIzaSyDP6H4i0CQWV0mzLW3wz2MKQ2BqB6cBde8",
+            authDomain: "clinica-centro-del-dolor.firebaseapp.com",
+            projectId: "clinica-centro-del-dolor",
+            storageBucket: "clinica-centro-del-dolor.firebasestorage.app",
+            messagingSenderId: "109898377168",
+            appId: "1:109898377168:web:cd556565814b6b439c3bd5",
+            measurementId: "G-WGDSQ7QJP2"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        // ESTADO GLOBAL
+        window.g_state = {
+            user: null,
+            role: null,
+            patients: [],
+            appointments: [],
+            payments: [],
+            packages: [],
+            therapists: [],
+            currentView: 'dashboard'
+        };
+
+        // CONSTANTES DE HORARIOS (Bloques de 45 minutos)
+        const TIME_SLOTS = [
+            "09:00", "09:45", "10:30", "11:15", "12:00", "12:45",
+            "16:00", "16:45", "17:30", "18:15", "19:00"
+        ];
+
+        async function initApp() {
+            try {
+                await signInAnonymously(auth);
+                startRealtimeSync();
+            } catch (error) {
+                console.error("Error conectando a Firebase:", error);
+                alert("Error de conexión. Intenta recargar la página.");
+            }
+        }
+
+        function startRealtimeSync() {
+            let syncCount = 0;
+            const checkReady = () => {
+                syncCount++;
+                if (syncCount === 5) {
+                    document.getElementById('loading-screen').classList.add('hidden');
+                    document.getElementById('login-screen').classList.remove('hidden');
+                    seedInitialData();
+                }
+            };
+
+            onSnapshot(collection(db, "patients"), (snap) => { window.g_state.patients = snap.docs.map(d => ({ id: d.id, ...d.data() })); if (syncCount < 5) checkReady(); else refreshUI(); });
+            onSnapshot(collection(db, "appointments"), (snap) => { window.g_state.appointments = snap.docs.map(d => ({ id: d.id, ...d.data() })); if (syncCount < 5) checkReady(); else refreshUI(); });
+            onSnapshot(collection(db, "payments"), (snap) => { window.g_state.payments = snap.docs.map(d => ({ id: d.id, ...d.data() })); if (syncCount < 5) checkReady(); else refreshUI(); });
+            onSnapshot(collection(db, "packages"), (snap) => { window.g_state.packages = snap.docs.map(d => ({ id: d.id, ...d.data() })); if (syncCount < 5) checkReady(); else refreshUI(); });
+            onSnapshot(collection(db, "therapists"), (snap) => { window.g_state.therapists = snap.docs.map(d => ({ id: d.id, ...d.data() })); if (syncCount < 5) checkReady(); else refreshUI(); });
+        }
+
+        async function seedInitialData() {
+            if (window.g_state.packages.length === 0) {
+                await addDoc(collection(db, "packages"), { name: "Paquete Básico (5 Sesiones)", price: 2000, sessions: 5, description: "Incluye valoración y 5 sesiones de terapia." });
+            }
+            if (window.g_state.therapists.length === 0) {
+                // Crear al menos un terapeuta de demostración si la base está vacía
+                await setDoc(doc(db, "therapists", "1111"), { name: "Lic. Ana Suárez", specialty: "Fisioterapia General", phone: "1111" });
+            }
+        }
+
+        // LOGIN
+        window.handleLogin = async function() {
+            const phone = document.getElementById('login-phone').value.trim();
+            if(!phone) return;
+
+            window.g_state.user = phone;
+
+            if (phone === 'admin') {
+                window.g_state.role = 'admin';
+                document.getElementById('user-display-name').innerText = 'Administrador';
+                document.getElementById('user-display-role').innerText = 'Control Total';
+                window.g_state.currentView = 'dashboard';
+            } else if (window.g_state.therapists.find(t => t.id === phone)) {
+                window.g_state.role = 'therapist';
+                const t = window.g_state.therapists.find(t => t.id === phone);
+                document.getElementById('user-display-name').innerText = t.name;
+                document.getElementById('user-display-role').innerText = 'Fisioterapeuta';
+                window.g_state.currentView = 'therapist_agenda';
+            } else {
+                window.g_state.role = 'patient';
+                const exists = window.g_state.patients.find(p => p.id === phone);
+                if (!exists) {
+                    await setDoc(doc(db, "patients", phone), {
+                        name: "Paciente Nuevo",
+                        phone: phone,
+                        sessionsCompleted: 0,
+                        sessionsTotal: 1,
+                        notes: { evolution: '', exercises: '', precautions: '' },
+                        registeredAt: new Date().toISOString()
+                    });
+                }
+                const p = window.g_state.patients.find(p => p.id === phone) || { name: 'Paciente' };
+                document.getElementById('user-display-name').innerText = p.name;
+                document.getElementById('user-display-role').innerText = 'Paciente';
+                window.g_state.currentView = 'patient_home';
+            }
+
+            document.getElementById('login-screen').classList.add('hidden');
+            document.getElementById('app-container').classList.remove('hidden');
+            buildSidebar();
+            refreshUI();
+        }
+
+        window.logout = function() {
+            window.g_state.user = null;
+            window.g_state.role = null;
+            document.getElementById('app-container').classList.add('hidden');
+            document.getElementById('login-screen').classList.remove('hidden');
+            document.getElementById('login-phone').value = '';
+        }
+
+        function buildSidebar() {
+            const nav = document.getElementById('nav-menu');
+            nav.innerHTML = '';
+            
+            const createBtn = (icon, text, view) => {
+                const isActive = window.g_state.currentView === view;
+                return `<button onclick="switchView('${view}')" class="w-full flex items-center gap-3 px-4 py-3 rounded-lg transition ${isActive ? 'bg-teal-50 text-teal-700 font-bold' : 'text-gray-600 hover:bg-gray-50'}">
+                    <i class="fa-solid ${icon} w-5"></i> <span>${text}</span>
+                </button>`;
+            };
+
+            if (window.g_state.role === 'admin') {
+                document.getElementById('sidebar').classList.remove('hidden');
+                nav.innerHTML += createBtn('fa-chart-pie', 'Panel Principal', 'dashboard');
+                nav.innerHTML += createBtn('fa-calendar-alt', 'Calendario', 'calendar');
+                nav.innerHTML += createBtn('fa-users', 'Pacientes', 'patients');
+                nav.innerHTML += createBtn('fa-user-doctor', 'Colaboradores', 'therapists');
+                nav.innerHTML += createBtn('fa-money-bill-wave', 'Pagos', 'payments');
+                nav.innerHTML += createBtn('fa-box-open', 'Paquetes', 'packages');
+            } else if (window.g_state.role === 'therapist') {
+                document.getElementById('sidebar').classList.remove('hidden');
+                nav.innerHTML += createBtn('fa-calendar-check', 'Mi Agenda', 'therapist_agenda');
+                nav.innerHTML += createBtn('fa-users', 'Expedientes', 'patients');
+            } else {
+                document.getElementById('sidebar').classList.add('hidden');
+            }
+        }
+
+        window.switchView = function(view) {
+            window.g_state.currentView = view;
+            buildSidebar();
+            refreshUI();
+            if(window.innerWidth < 768 && window.g_state.role !== 'patient') {
+                document.getElementById('sidebar').classList.add('hidden');
+            }
+        }
+
+        window.toggleMobileMenu = function() {
+            const sb = document.getElementById('sidebar');
+            if(sb.classList.contains('hidden')) {
+                sb.classList.remove('hidden');
+                sb.classList.add('absolute', 'inset-y-0', 'left-0', 'shadow-2xl');
+            } else {
+                sb.classList.add('hidden');
+            }
+        }
+
+        window.refreshUI = function() {
+            if(!window.g_state.user) return;
+            const container = document.getElementById('views-container');
+            
+            if(window.g_state.role === 'patient') {
+                container.innerHTML = renderPatientView();
+            } else {
+                switch(window.g_state.currentView) {
+                    case 'dashboard': container.innerHTML = renderDashboard(); break;
+                    case 'calendar': container.innerHTML = renderCalendar(); break;
+                    case 'patients': container.innerHTML = renderPatients(); break;
+                    case 'therapists': container.innerHTML = renderColaboradores(); break;
+                    case 'payments': container.innerHTML = renderPayments(); break;
+                    case 'packages': container.innerHTML = renderPackages(); break;
+                    case 'therapist_agenda': container.innerHTML = renderTherapistAgenda(); break;
+                }
+            }
+        }
+
+        // ==========================================
+        // VISTA DEL PACIENTE (CITAS DE 45 MIN)
+        // ==========================================
+        function renderPatientView() {
+            const patient = window.g_state.patients.find(p => p.id === window.g_state.user);
+            if(!patient) return `<p>Cargando...</p>`;
+            
+            const myAppointments = window.g_state.appointments.filter(a => a.patientId === patient.id && a.date >= new Date().toISOString().split('T')[0]).sort((a,b) => a.date.localeCompare(b.date));
+            const progress = (patient.sessionsCompleted / patient.sessionsTotal) * 100;
+
+            return `
+                <div class="max-w-4xl mx-auto space-y-6 fade-in pb-10">
+                    <h2 class="text-3xl font-bold text-gray-800">Hola, ${patient.name}</h2>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <!-- Agendar Cita (Disponibilidad Dinámica) -->
+                        <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                            <h3 class="font-bold text-gray-800 mb-4 text-lg"><i class="fa-solid fa-calendar-plus text-teal-600 mr-2"></i>Agendar Nueva Cita</h3>
+                            <div class="space-y-3">
+                                <label class="text-xs text-gray-500 font-bold uppercase">1. Elige Especialista</label>
+                                <select id="book-therapist" class="w-full p-3 border rounded-lg bg-gray-50 focus:ring-teal-500" onchange="updateAvailableTimes()">
+                                    <option value="">Selecciona Fisioterapeuta...</option>
+                                    ${window.g_state.therapists.map(t => `<option value="${t.id}">${t.name} - ${t.specialty}</option>`).join('')}
+                                </select>
+                                
+                                <label class="text-xs text-gray-500 font-bold uppercase mt-2">2. Elige Fecha</label>
+                                <input type="date" id="book-date" class="w-full p-3 border rounded-lg bg-gray-50" min="${new Date().toISOString().split('T')[0]}" onchange="updateAvailableTimes()">
+                                
+                                <label class="text-xs text-gray-500 font-bold uppercase mt-2">3. Horarios Disponibles (45 min)</label>
+                                <select id="book-time" class="w-full p-3 border rounded-lg bg-gray-50 disabled:opacity-50" disabled>
+                                    <option value="">Selecciona fecha y especialista primero...</option>
+                                </select>
+                                
+                                <button onclick="bookAppointment()" class="w-full bg-teal-600 text-white font-bold py-3 rounded-lg hover:bg-teal-700 transition mt-2">Confirmar Cita</button>
+                            </div>
+                        </div>
+
+                        <!-- Mi Progreso -->
+                        <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex flex-col justify-center items-center text-center">
+                            <h3 class="font-bold text-gray-800 mb-2 text-lg"><i class="fa-solid fa-chart-line text-teal-600 mr-2"></i>Avance de Tratamiento</h3>
+                            <div class="relative w-32 h-32 flex items-center justify-center my-4">
+                                <svg class="w-full h-full transform -rotate-90">
+                                    <circle cx="64" cy="64" r="56" stroke="#f1f5f9" stroke-width="12" fill="none"></circle>
+                                    <circle cx="64" cy="64" r="56" stroke="#0f766e" stroke-width="12" fill="none" stroke-dasharray="351.8" stroke-dashoffset="${351.8 - (351.8 * Math.min(progress,100) / 100)}" class="transition-all duration-1000"></circle>
+                                </svg>
+                                <div class="absolute text-2xl font-bold text-teal-700">${patient.sessionsCompleted}</div>
+                            </div>
+                            <p class="text-gray-500 font-medium">Sesión <span class="text-gray-800">${patient.sessionsCompleted}</span> de <span class="text-gray-800">${patient.sessionsTotal}</span></p>
+                        </div>
+
+                        <!-- Plan en Casa -->
+                        <div class="bg-teal-50 p-6 rounded-xl shadow-sm border border-teal-100 md:col-span-2">
+                            <h3 class="font-bold text-teal-800 mb-4 text-lg"><i class="fa-solid fa-house-medical text-teal-600 mr-2"></i>Mi Plan en Casa</h3>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div class="bg-white p-4 rounded-lg shadow-sm border-l-4 border-teal-500">
+                                    <h4 class="font-semibold text-gray-700 text-sm uppercase mb-2">Ejercicios Recetados</h4>
+                                    <p class="text-gray-600 text-sm whitespace-pre-line">${patient.notes?.exercises || 'Aún no hay ejercicios.'}</p>
+                                </div>
+                                <div class="bg-white p-4 rounded-lg shadow-sm border-l-4 border-red-400">
+                                    <h4 class="font-semibold text-red-700 text-sm uppercase mb-2">Cuidados Especiales</h4>
+                                    <p class="text-gray-600 text-sm whitespace-pre-line">${patient.notes?.precautions || 'Ninguno por ahora.'}</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Mis Citas Futuras -->
+                        <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100 md:col-span-2">
+                            <h3 class="font-bold text-gray-800 mb-4 text-lg"><i class="fa-solid fa-clock text-teal-600 mr-2"></i>Mis Próximas Citas</h3>
+                            ${myAppointments.length === 0 ? '<p class="text-gray-500 italic">No tienes citas programadas.</p>' : ''}
+                            <div class="space-y-3">
+                                ${myAppointments.map(a => `
+                                    <div class="flex justify-between items-center bg-gray-50 p-4 rounded-lg border border-gray-100">
+                                        <div>
+                                            <p class="font-bold text-gray-800 text-lg">${a.date} <span class="text-teal-600">• ${a.time}</span></p>
+                                            <p class="text-sm text-gray-500">Con ${a.therapistName}</p>
+                                        </div>
+                                        <button onclick="cancelAppointment('${a.id}')" class="text-red-500 hover:bg-red-100 p-2 rounded-full transition" title="Cancelar Cita">
+                                            <i class="fa-solid fa-times text-xl"></i>
+                                        </button>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    </div>
+                </div>`;
+        }
+
+        // LÓGICA DE HORARIOS DINÁMICOS
+        window.updateAvailableTimes = function() {
+            const therapistId = document.getElementById('book-therapist').value;
+            const date = document.getElementById('book-date').value;
+            const timeSelect = document.getElementById('book-time');
+
+            if (!therapistId || !date) {
+                timeSelect.innerHTML = '<option value="">Selecciona fecha y especialista primero...</option>';
+                timeSelect.disabled = true;
+                return;
+            }
+
+            // Buscar qué horarios ya están ocupados para ese día y ese terapeuta
+            const occupiedTimes = window.g_state.appointments
+                .filter(a => a.therapistId === therapistId && a.date === date)
+                .map(a => a.time);
+
+            // Filtrar los horarios (de 45 min) que están libres
+            const availableSlots = TIME_SLOTS.filter(slot => !occupiedTimes.includes(slot));
+
+            if (availableSlots.length === 0) {
+                timeSelect.innerHTML = '<option value="">Agenda llena para este día</option>';
+                timeSelect.disabled = true;
+            } else {
+                timeSelect.innerHTML = `<option value="">Selecciona un horario...</option>
+                    ${availableSlots.map(time => `<option value="${time}">${time}</option>`).join('')}`;
+                timeSelect.disabled = false;
+            }
+        }
+
+        window.bookAppointment = async function() {
+            const therapistId = document.getElementById('book-therapist').value;
+            const date = document.getElementById('book-date').value;
+            const time = document.getElementById('book-time').value;
+
+            if(!therapistId || !date || !time) {
+                return alert("Selecciona Especialista, Fecha y Horario.");
+            }
+
+            const therapist = window.g_state.therapists.find(t => t.id === therapistId);
+            const patient = window.g_state.patients.find(p => p.id === window.g_state.user);
+
+            await addDoc(collection(db, "appointments"), {
+                patientId: patient.id,
+                patientName: patient.name,
+                therapistId: therapist.id,
+                therapistName: therapist.name,
+                date: date,
+                time: time,
+                status: 'Confirmada',
+                createdAt: new Date().toISOString()
+            });
+
+            alert("Cita agendada correctamente.");
+            refreshUI(); // Refrescar para limpiar formulario
+        }
+
+        window.cancelAppointment = async function(id) {
+            if(confirm("¿Cancelar cita? El horario quedará disponible para otros.")) {
+                await deleteDoc(doc(db, "appointments", id));
+            }
+        }
+
+        // ==========================================
+        // VISTA DE COLABORADORES (ADMIN)
+        // ==========================================
+        function renderColaboradores() {
+            return `
+            <div class="fade-in">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-2xl font-bold text-gray-800">Directorio de Colaboradores</h2>
+                    <button onclick="openAddColaborador()" class="bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 font-semibold"><i class="fa-solid fa-plus mr-2"></i>Nuevo Terapeuta</button>
+                </div>
+                <div class="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-100">
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr class="bg-gray-50 text-gray-600 text-sm border-b">
+                                <th class="p-4 font-semibold">Nombre</th>
+                                <th class="p-4 font-semibold">Especialidad</th>
+                                <th class="p-4 font-semibold">Teléfono (Login)</th>
+                                <th class="p-4 font-semibold text-right">Acción</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-100">
+                            ${window.g_state.therapists.map(t => `
+                                <tr class="hover:bg-gray-50 transition">
+                                    <td class="p-4 font-medium text-gray-800">${t.name}</td>
+                                    <td class="p-4 text-gray-600">${t.specialty}</td>
+                                    <td class="p-4 font-mono text-teal-600">${t.phone}</td>
+                                    <td class="p-4 text-right">
+                                        <button onclick="deleteColaborador('${t.id}')" class="text-red-500 hover:bg-red-100 p-2 rounded-lg transition" title="Eliminar"><i class="fa-solid fa-trash"></i></button>
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            </div>`;
+        }
+
+        window.openAddColaborador = function() {
+            const modalHtml = `
+            <div id="colab-modal" class="fixed inset-0 bg-black bg-opacity-50 z-[60] flex items-center justify-center p-4 fade-in">
+                <div class="bg-white rounded-2xl w-full max-w-md p-6">
+                    <h2 class="text-xl font-bold text-gray-800 mb-4">Agregar Fisioterapeuta</h2>
+                    <div class="space-y-4">
+                        <input type="text" id="col-name" placeholder="Nombre completo (Ej. Lic. Ana Suárez)" class="w-full p-3 border rounded-lg bg-gray-50">
+                        <input type="text" id="col-spec" placeholder="Especialidad (Ej. Rehabilitación)" class="w-full p-3 border rounded-lg bg-gray-50">
+                        <input type="number" id="col-phone" placeholder="Número de celular (Será su contraseña)" class="w-full p-3 border rounded-lg bg-gray-50">
+                        
+                        <div class="flex justify-end gap-2 pt-4">
+                            <button onclick="document.getElementById('colab-modal').remove()" class="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded-lg">Cancelar</button>
+                            <button onclick="guardarColaborador()" class="px-4 py-2 bg-teal-600 text-white font-bold rounded-lg hover:bg-teal-700">Guardar</button>
+                        </div>
+                    </div>
+                </div>
+            </div>`;
+            document.getElementById('modals').insertAdjacentHTML('beforeend', modalHtml);
+        }
+
+        window.guardarColaborador = async function() {
+            const name = document.getElementById('col-name').value.trim();
+            const spec = document.getElementById('col-spec').value.trim();
+            const phone = document.getElementById('col-phone').value.trim();
+            
+            if(!name || !spec || !phone) return alert("Completa todos los campos");
+            
+            await setDoc(doc(db, "therapists", phone), {
+                name: name,
+                specialty: spec,
+                phone: phone
+            });
+            document.getElementById('colab-modal').remove();
+        }
+
+        window.deleteColaborador = async function(id) {
+            if(confirm("¿Eliminar a este terapeuta del sistema?")) {
+                await deleteDoc(doc(db, "therapists", id));
+            }
+        }
+
+        // ==========================================
+        // OTRAS VISTAS (ADMIN/TERAPEUTA) - Sin Cambios Mayores
+        // ==========================================
+        function renderDashboard() {
+            const today = new Date().toISOString().split('T')[0];
+            const todayAppts = window.g_state.appointments.filter(a => a.date === today);
+            const totalIngresos = window.g_state.payments.reduce((sum, p) => sum + Number(p.amount), 0);
+
+            return `
+            <div class="fade-in">
+                <h2 class="text-2xl font-bold text-gray-800 mb-6">Resumen de Hoy</h2>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                    <div class="bg-white p-6 rounded-xl shadow-sm border-l-4 border-teal-500">
+                        <p class="text-gray-500 text-sm font-semibold uppercase mb-1">Citas Hoy</p>
+                        <h3 class="text-3xl font-bold text-gray-800">${todayAppts.length}</h3>
+                    </div>
+                    <div class="bg-white p-6 rounded-xl shadow-sm border-l-4 border-blue-500">
+                        <p class="text-gray-500 text-sm font-semibold uppercase mb-1">Pacientes Activos</p>
+                        <h3 class="text-3xl font-bold text-gray-800">${window.g_state.patients.length}</h3>
+                    </div>
+                    <div class="bg-white p-6 rounded-xl shadow-sm border-l-4 border-green-500">
+                        <p class="text-gray-500 text-sm font-semibold uppercase mb-1">Ingresos Acumulados</p>
+                        <h3 class="text-3xl font-bold text-gray-800">$${totalIngresos.toLocaleString()}</h3>
+                    </div>
+                </div>
+            </div>`;
+        }
+
+        function renderPatients() {
+            return `
+            <div class="fade-in">
+                <h2 class="text-2xl font-bold text-gray-800 mb-6">Directorio de Pacientes</h2>
+                <div class="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-100">
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr class="bg-gray-50 text-gray-600 text-sm border-b">
+                                <th class="p-4 font-semibold">Nombre</th>
+                                <th class="p-4 font-semibold">Teléfono</th>
+                                <th class="p-4 font-semibold">Avance</th>
+                                <th class="p-4 font-semibold text-center">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-100">
+                            ${window.g_state.patients.map(p => `
+                                <tr class="hover:bg-gray-50 transition">
+                                    <td class="p-4 font-medium text-gray-800">${p.name}</td>
+                                    <td class="p-4 text-gray-600">${p.phone}</td>
+                                    <td class="p-4">
+                                        <div class="w-full bg-gray-200 rounded-full h-2.5 max-w-[100px]">
+                                            <div class="bg-teal-600 h-2.5 rounded-full" style="width: ${(p.sessionsCompleted/p.sessionsTotal)*100}%"></div>
+                                        </div>
+                                        <span class="text-xs text-gray-500">${p.sessionsCompleted}/${p.sessionsTotal}</span>
+                                    </td>
+                                    <td class="p-4 text-center space-x-2">
+                                        <button onclick="openExpediente('${p.id}')" class="bg-teal-100 text-teal-700 px-3 py-1 rounded text-sm hover:bg-teal-200 font-semibold"><i class="fa-solid fa-folder-open"></i> Expediente</button>
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            </div>`;
+        }
+
+        window.openExpediente = function(patientId) {
+            const p = window.g_state.patients.find(x => x.id === patientId);
+            if(!p) return;
+            const isAdmin = window.g_state.role === 'admin';
+
+            const modalHtml = `
+            <div id="expediente-modal" class="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4 fade-in">
+                <div class="bg-white rounded-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto flex flex-col">
+                    <div class="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50 sticky top-0 z-10">
+                        <div>
+                            <h2 class="text-xl font-bold text-gray-800"><i class="fa-solid fa-file-medical text-teal-600 mr-2"></i>Expediente: ${p.name}</h2>
+                            <input type="text" value="${p.name}" onblur="updatePatientName('${p.id}', this.value)" class="text-sm border-b bg-transparent focus:outline-none focus:border-teal-500 w-full text-gray-500 mt-1" placeholder="Editar nombre del paciente...">
+                        </div>
+                        <div class="flex gap-2">
+                            ${isAdmin ? `
+                                <button onclick="openVentaPaquete('${p.id}')" class="bg-purple-100 text-purple-700 p-2 rounded-lg hover:bg-purple-200 transition" title="Vender Paquete"><i class="fa-solid fa-box-open"></i></button>
+                                <button onclick="openRegistrarPago('${p.id}')" class="bg-gray-200 text-gray-700 p-2 rounded-lg hover:bg-gray-300 transition" title="Registrar Pago Individual"><i class="fa-solid fa-dollar-sign"></i></button>
+                            ` : ''}
+                            <a href="https://wa.me/52${p.phone}?text=Hola%20${encodeURIComponent(p.name)},%20te%20escribimos%20del%20Centro%20del%20Dolor." target="_blank" class="bg-green-100 text-green-700 p-2 rounded-lg hover:bg-green-200 transition"><i class="fa-brands fa-whatsapp text-lg"></i></a>
+                            <button onclick="document.getElementById('expediente-modal').remove()" class="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
+                        </div>
+                    </div>
+                    
+                    <div class="p-6 space-y-6">
+                        <div class="bg-gray-50 p-4 rounded-lg flex justify-between items-center">
+                            <div>
+                                <p class="text-sm text-gray-500 font-semibold uppercase">Avance (Sesiones)</p>
+                                <div class="flex items-center gap-2 mt-1">
+                                    <span class="text-2xl font-bold text-teal-700" id="exp-completed">${p.sessionsCompleted}</span>
+                                    <span class="text-gray-400">/</span>
+                                    <input type="number" id="exp-total" value="${p.sessionsTotal}" onblur="updateTotalSessions('${p.id}', this.value)" class="w-16 p-1 border rounded text-center font-bold text-gray-700 bg-white">
+                                </div>
+                            </div>
+                            <div class="flex gap-2">
+                                <button onclick="changeSessions('${p.id}', -1)" class="bg-red-100 text-red-600 px-4 py-2 rounded-lg font-bold hover:bg-red-200">-</button>
+                                <button onclick="changeSessions('${p.id}', 1)" class="bg-teal-600 text-white px-4 py-2 rounded-lg font-bold hover:bg-teal-700">+ Sumar Sesión</button>
+                            </div>
+                        </div>
+
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-semibold text-gray-700 mb-1">Evolución (Sesión Actual)</label>
+                                <textarea id="note-evo" class="w-full p-3 border rounded-lg bg-yellow-50 focus:ring-2 focus:ring-yellow-400 h-24" onblur="saveNotes('${p.id}')">${p.notes?.evolution || ''}</textarea>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-semibold text-gray-700 mb-1">Ejercicios (Plan en Casa)</label>
+                                <textarea id="note-exe" class="w-full p-3 border rounded-lg bg-blue-50 focus:ring-2 focus:ring-blue-400 h-24" onblur="saveNotes('${p.id}')">${p.notes?.exercises || ''}</textarea>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-semibold text-red-700 mb-1">Cuidados Especiales</label>
+                                <textarea id="note-pre" class="w-full p-3 border rounded-lg bg-red-50 focus:ring-2 focus:ring-red-400 h-20 text-red-800" onblur="saveNotes('${p.id}')">${p.notes?.precautions || ''}</textarea>
+                            </div>
+                        </div>
+                        <p id="save-status" class="text-green-600 text-sm font-semibold text-center hidden">¡Historial guardado!</p>
+                    </div>
+                </div>
+            </div>`;
+            document.getElementById('modals').innerHTML = modalHtml;
+        }
+
+        window.updatePatientName = async function(id, name) {
+            await updateDoc(doc(db, "patients", id), { name: name });
+        }
+        window.changeSessions = async function(id, amount) {
+            const p = window.g_state.patients.find(x => x.id === id);
+            let newTotal = p.sessionsCompleted + amount;
+            if(newTotal < 0) newTotal = 0;
+            await updateDoc(doc(db, "patients", id), { sessionsCompleted: newTotal });
+            document.getElementById('exp-completed').innerText = newTotal;
+        }
+        window.updateTotalSessions = async function(id, val) {
+            await updateDoc(doc(db, "patients", id), { sessionsTotal: Number(val) });
+        }
+        window.saveNotes = async function(id) {
+            const evo = document.getElementById('note-evo').value;
+            const exe = document.getElementById('note-exe').value;
+            const pre = document.getElementById('note-pre').value;
+            await updateDoc(doc(db, "patients", id), { notes: { evolution: evo, exercises: exe, precautions: pre } });
+            const st = document.getElementById('save-status');
+            st.classList.remove('hidden'); setTimeout(() => st.classList.add('hidden'), 2000);
+        }
+
+        function renderCalendar() {
+            const appts = [...window.g_state.appointments].sort((a,b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
+            return `
+            <div class="fade-in">
+                <h2 class="text-2xl font-bold text-gray-800 mb-6">Calendario Global</h2>
+                <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-100 space-y-3">
+                    ${appts.length === 0 ? '<p>No hay citas.</p>' : ''}
+                    ${appts.map(a => `
+                        <div class="flex p-3 bg-gray-50 rounded-lg border justify-between items-center">
+                            <div>
+                                <span class="font-bold text-teal-700">${a.date} ${a.time}</span>
+                                <span class="ml-2 font-semibold">${a.patientName}</span>
+                                <span class="text-sm text-gray-500 ml-2">con ${a.therapistName}</span>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>`;
+        }
+
+        function renderPayments() {
+            return `
+            <div class="fade-in">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-2xl font-bold text-gray-800">Pagos</h2>
+                    <button onclick="openRegistrarPago()" class="bg-teal-600 text-white px-4 py-2 rounded-lg font-semibold">Registrar Pago</button>
+                </div>
+                <div class="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-100">
+                    <table class="w-full text-left border-collapse">
+                        <thead><tr class="bg-gray-50 border-b"><th class="p-4">Fecha</th><th class="p-4">Paciente</th><th class="p-4">Concepto</th><th class="p-4">Monto</th></tr></thead>
+                        <tbody class="divide-y divide-gray-100">
+                            ${window.g_state.payments.map(p => `<tr><td class="p-4">${p.date}</td><td class="p-4">${p.patientName}</td><td class="p-4">${p.concept}</td><td class="p-4 text-teal-700 font-bold">$${p.amount}</td></tr>`).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            </div>`;
+        }
+        
+        window.openRegistrarPago = function(patientId = '') {
+            const pOpts = window.g_state.patients.map(p => `<option value="${p.id}" ${p.id===patientId?'selected':''}>${p.name}</option>`).join('');
+            const modalHtml = `
+            <div id="pago-modal" class="fixed inset-0 bg-black bg-opacity-50 z-[60] flex items-center justify-center p-4">
+                <div class="bg-white rounded-2xl w-full max-w-md p-6">
+                    <h2 class="text-xl font-bold mb-4">Registrar Pago</h2>
+                    <div class="space-y-4">
+                        <select id="pay-pat" class="w-full p-3 border rounded-lg">${pOpts}</select>
+                        <input type="text" id="pay-con" placeholder="Concepto" class="w-full p-3 border rounded-lg">
+                        <input type="number" id="pay-amo" placeholder="Monto $" class="w-full p-3 border rounded-lg">
+                        <div class="flex justify-end gap-2 pt-4">
+                            <button onclick="document.getElementById('pago-modal').remove()" class="px-4 py-2">Cancelar</button>
+                            <button onclick="guardarPago()" class="px-4 py-2 bg-teal-600 text-white rounded-lg">Guardar</button>
+                        </div>
+                    </div>
+                </div>
+            </div>`;
+            document.getElementById('modals').innerHTML = modalHtml;
+        }
+        window.guardarPago = async function() {
+            const patId = document.getElementById('pay-pat').value;
+            const pat = window.g_state.patients.find(x => x.id === patId);
+            await addDoc(collection(db, "payments"), {
+                patientId: pat.id, patientName: pat.name,
+                concept: document.getElementById('pay-con').value,
+                amount: Number(document.getElementById('pay-amo').value),
+                date: new Date().toISOString().split('T')[0]
+            });
+            document.getElementById('pago-modal').remove();
+        }
+
+        // Terapeutas Agenda
+        function renderTherapistAgenda() {
+            const today = new Date().toISOString().split('T')[0];
+            const myAppts = window.g_state.appointments.filter(a => a.therapistId === window.g_state.user).sort((a,b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
+            return `
+            <div class="fade-in max-w-4xl mx-auto">
+                <h2 class="text-2xl font-bold text-gray-800 mb-6">Mi Agenda</h2>
+                <div class="space-y-4">
+                    ${myAppts.map(a => `
+                        <div class="bg-white p-5 rounded-xl shadow-sm border-l-4 border-l-teal-500 flex justify-between items-center">
+                            <div><p class="text-xs text-gray-500 uppercase">${a.date} • ${a.time}</p><p class="text-lg font-bold">${a.patientName}</p></div>
+                            <button onclick="openExpediente('${a.patientId}')" class="bg-teal-50 text-teal-700 px-4 py-2 rounded-lg font-semibold hover:bg-teal-100">Abrir Expediente</button>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>`;
+        }
+
+        // Iniciar
+        initApp();
+    </script>
+</body>
+</html>
