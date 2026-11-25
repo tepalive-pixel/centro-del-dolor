@@ -2,31 +2,42 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Centro del Dolor - Portal</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Centro del Dolor - Portal Clínico</title>
+    
+    <!-- Tailwind CSS (Colores y Diseño) -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Fuentes e Íconos -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+
+    <!-- Firebase (Conexión a Base de Datos) -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+
     <style>
-        .fade-in { animation: fadeIn 0.3s ease-in-out; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
-        /* Scrollbar styling */
-        ::-webkit-scrollbar { width: 6px; }
-        ::-webkit-scrollbar-track { background: #f1f1f1; }
-        ::-webkit-scrollbar-thumb { background: #0d9488; border-radius: 4px; }
+        body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; }
+        .view-section { display: none; }
+        .view-section.active { display: block; }
+        
+        /* Diseño Responsivo: Barra Lateral vs Barra Inferior (App) */
+        @media (max-width: 768px) {
+            #sidebar { display: none !important; }
+            #mobile-nav { display: flex !important; }
+            #main-content { margin-left: 0 !important; margin-bottom: 5rem; }
+        }
+        
+        /* Modal Background */
+        .modal-bg { background-color: rgba(0, 0, 0, 0.5); backdrop-filter: blur(4px); }
     </style>
 </head>
-<body class="bg-gray-100 text-gray-800 font-sans min-h-screen">
+<body class="text-gray-800 antialiased overflow-x-hidden">
 
-    <div id="app-container"></div>
-    <div id="modals"></div>
-    <div id="image-viewer"></div> <!-- Visor de imágenes a pantalla completa -->
-
-    <script type="module">
-        // 1. IMPORTAR FIREBASE
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
-        import { getFirestore, collection, getDocs, doc, setDoc, updateDoc, onSnapshot, deleteDoc } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
-
-        // TU CONFIGURACIÓN DE FIREBASE
+    <!-- ========================================== -->
+    <!-- CONFIGURACIÓN DE FIREBASE (YA INTEGRADA) -->
+    <!-- ========================================== -->
+    <script>
         const firebaseConfig = {
             apiKey: "AIzaSyDP6H4i0CQWV0mzLW3wz2MKQ2BqB6cBde8",
             authDomain: "clinica-centro-del-dolor.firebaseapp.com",
@@ -36,533 +47,687 @@
             appId: "1:109898377168:web:cd556565814b6b439c3bd5",
             measurementId: "G-WGDSQ7QJP2"
         };
-
-        const app = initializeApp(firebaseConfig);
-        const db = getFirestore(app);
-
-        // Variables de estado
-        let currentUser = null;
-        let currentTab = 'citas';
-        let patients = [];
-        let packages = [];
-        let collaborators = [];
-        let citas = [];
-
-        // 2. SISTEMA DE LOGIN
-        window.initApp = function() {
-            renderLogin();
+        
+        let db = null;
+        if(firebaseConfig.apiKey && firebaseConfig.apiKey !== "PEGAR_AQUI") {
+            firebase.initializeApp(firebaseConfig);
+            db = firebase.firestore();
+        } else {
+            console.warn("Falta configuración de Firebase. Funcionando en modo local.");
         }
+    </script>
 
-        function renderLogin() {
-            const html = `
-            <div class="min-h-screen flex items-center justify-center bg-teal-700 p-4">
-                <div class="bg-white p-8 rounded-2xl shadow-xl w-full max-w-sm text-center fade-in">
-                    <img src="image_1027ac.jpg" alt="Centro del Dolor" class="h-32 mx-auto mb-6 object-contain rounded-full border p-2" onerror="this.src='https://cdn-icons-png.flaticon.com/512/2960/2960006.png'">
-                    <h1 class="text-2xl font-bold text-teal-800 mb-2">Bienvenido</h1>
-                    <p class="text-gray-500 mb-6 text-sm">Ingresa tu número celular para acceder</p>
-                    
-                    <input type="password" id="login-input" placeholder="Ej. 5512345678" class="w-full p-4 border border-gray-200 rounded-xl mb-4 text-center text-lg focus:outline-none focus:border-teal-500 bg-gray-50">
-                    <button id="btn-login" onclick="login()" class="w-full bg-teal-600 text-white font-bold py-4 rounded-xl hover:bg-teal-700 transition shadow-md">
-                        Ingresar al Portal
-                    </button>
-                    <p id="login-error" class="text-red-500 text-sm mt-3 hidden">Usuario no encontrado</p>
+    <!-- ========================================== -->
+    <!-- PANTALLA DE INICIO DE SESIÓN -->
+    <!-- ========================================== -->
+    <div id="login-screen" class="min-h-screen flex items-center justify-center bg-teal-700 p-4">
+        <div class="bg-white p-8 rounded-3xl shadow-2xl w-full max-w-md text-center">
+            <img src="image_1027ac.jpg" alt="Logo Centro del Dolor" class="h-32 mx-auto mb-6 object-contain rounded-xl" onerror="this.src='https://placehold.co/200x200/teal/white?text=Logo'">
+            <h2 class="text-2xl font-bold text-gray-800 mb-2">Bienvenido</h2>
+            <p class="text-gray-500 mb-8 text-sm">Ingresa tu número celular para acceder</p>
+            
+            <input type="text" id="login-input" placeholder="Ej. 5512345678" class="w-full p-4 border border-gray-300 rounded-xl mb-4 text-center text-lg focus:outline-none focus:ring-2 focus:ring-teal-500">
+            <button onclick="iniciarSesion()" class="w-full bg-teal-600 text-white font-bold py-4 rounded-xl hover:bg-teal-700 transition shadow-lg text-lg">Ingresar al Portal</button>
+        </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- APLICACIÓN PRINCIPAL -->
+    <!-- ========================================== -->
+    <div id="app-screen" class="hidden min-h-screen flex bg-gray-100">
+        
+        <!-- BARRA LATERAL (PC) -->
+        <nav id="sidebar" class="w-64 bg-white shadow-xl fixed h-full flex flex-col justify-between hidden md:flex z-10">
+            <div>
+                <div class="p-6 text-center border-b">
+                    <img src="image_1027ac.jpg" class="h-16 mx-auto mb-2 object-contain" onerror="this.src='https://placehold.co/100x100/teal/white?text=Logo'">
+                    <h1 class="font-bold text-teal-800 text-lg">Centro del Dolor</h1>
+                    <p id="user-role-text" class="text-xs text-gray-500 font-semibold uppercase mt-1"></p>
                 </div>
-            </div>`;
-            document.getElementById('app-container').innerHTML = html;
-            document.getElementById('login-input').addEventListener('keypress', function(e) { if(e.key === 'Enter') login(); });
-        }
+                <div class="p-4 space-y-2" id="nav-links-desktop"></div>
+            </div>
+            <div class="p-4 border-t flex justify-between items-center">
+                <button onclick="abrirAjustes()" id="btn-ajustes" class="text-gray-500 hover:text-teal-600 hidden"><i class="fa-solid fa-gear text-xl"></i></button>
+                <button onclick="cerrarSesion()" class="text-red-500 font-bold hover:bg-red-50 px-4 py-2 rounded-lg flex-1 flex items-center justify-center gap-2"><i class="fa-solid fa-right-from-bracket"></i> Salir</button>
+            </div>
+        </nav>
 
-        window.login = async function() {
-            const input = document.getElementById('login-input').value.trim();
-            const btn = document.getElementById('btn-login');
-            const err = document.getElementById('login-error');
+        <!-- CONTENIDO PRINCIPAL -->
+        <main id="main-content" class="flex-1 p-4 md:p-8 md:ml-64 w-full">
             
-            if(!input) return;
-            
-            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Conectando...';
-            err.classList.add('hidden');
+            <!-- VISTA: AGENDA -->
+            <section id="view-agenda" class="view-section active">
+                <div class="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
+                    <h2 class="text-2xl font-bold text-gray-800"><i class="fa-regular fa-calendar-check mr-2 text-teal-600"></i>Agenda y Citas</h2>
+                    <button onclick="abrirModalCita()" class="bg-teal-600 text-white px-6 py-3 rounded-xl font-bold shadow-md w-full md:w-auto"><i class="fa-solid fa-plus mr-2"></i>Agendar Cita</button>
+                </div>
 
-            if (input === 'AdminCentro26!') {
-                currentUser = { role: 'admin', name: 'Administrador' };
-                loadData();
-            } else {
-                err.innerText = "Modo paciente en desarrollo. Usa tu acceso Admin.";
-                err.classList.remove('hidden');
-                btn.innerHTML = 'Ingresar al Portal';
-            }
-        }
+                <!-- Filtros (Solo visible para Admin) -->
+                <div id="agenda-filters" class="bg-white p-4 rounded-xl shadow-sm mb-6 flex gap-4 overflow-x-auto hidden items-center">
+                    <input type="date" id="filter-date" onchange="renderAgenda()" class="border p-2 rounded-lg">
+                    <select id="filter-fisio" onchange="renderAgenda()" class="border p-2 rounded-lg min-w-[150px]">
+                        <option value="">Todos los Terapeutas</option>
+                    </select>
+                    <button onclick="limpiarFiltrosAgenda()" class="text-teal-600 font-bold text-sm ml-auto whitespace-nowrap px-4 hover:underline">Ver Todas</button>
+                </div>
 
-        // 3. CARGAR DATOS EN TIEMPO REAL
-        function loadData() {
-            onSnapshot(collection(db, "patients"), (snapshot) => {
-                patients = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                if(currentUser && currentTab === 'pacientes') renderDashboard();
-                
-                // Actualizar modal de expediente si está abierto
-                const expModalOpen = document.getElementById('exp-modal-id');
-                if(expModalOpen) openExpediente(expModalOpen.value);
-            });
+                <div id="citas-container" class="space-y-6"></div>
+            </section>
 
-            onSnapshot(collection(db, "packages"), (snapshot) => {
-                packages = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                if(currentUser && currentTab === 'paquetes') renderDashboard();
-            });
-
-            onSnapshot(collection(db, "collaborators"), (snapshot) => {
-                collaborators = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                if(currentUser && currentTab === 'colaboradores') renderDashboard();
-            });
-
-            renderDashboard();
-        }
-
-        // 4. INTERFAZ PRINCIPAL (ADMIN)
-        function renderDashboard() {
-            const html = `
-            <div class="flex h-screen overflow-hidden">
-                <!-- Menú Lateral -->
-                <aside class="w-64 bg-teal-800 text-white flex flex-col">
-                    <div class="p-6 text-center border-b border-teal-700">
-                        <img src="image_1027ac.jpg" onerror="this.style.display='none'" class="h-16 mx-auto bg-white rounded-full p-1 mb-2">
-                        <h2 class="font-bold text-lg">Centro del Dolor</h2>
-                        <p class="text-teal-200 text-sm">Panel Admin</p>
-                    </div>
-                    <nav class="flex-1 p-4 space-y-2">
-                        <button onclick="changeTab('citas')" class="w-full flex items-center p-3 rounded-lg hover:bg-teal-700 transition ${currentTab === 'citas' ? 'bg-teal-700 font-bold' : ''}">
-                            <i class="fa-regular fa-calendar w-6"></i> Agenda
-                        </button>
-                        <button onclick="changeTab('pacientes')" class="w-full flex items-center p-3 rounded-lg hover:bg-teal-700 transition ${currentTab === 'pacientes' ? 'bg-teal-700 font-bold' : ''}">
-                            <i class="fa-solid fa-users w-6"></i> Pacientes
-                        </button>
-                        <button onclick="changeTab('colaboradores')" class="w-full flex items-center p-3 rounded-lg hover:bg-teal-700 transition ${currentTab === 'colaboradores' ? 'bg-teal-700 font-bold' : ''}">
-                            <i class="fa-solid fa-user-doctor w-6"></i> Colaboradores
-                        </button>
-                        <button onclick="changeTab('paquetes')" class="w-full flex items-center p-3 rounded-lg hover:bg-teal-700 transition ${currentTab === 'paquetes' ? 'bg-teal-700 font-bold' : ''}">
-                            <i class="fa-solid fa-box-open w-6"></i> Paquetes
-                        </button>
-                    </nav>
-                    <div class="p-4 border-t border-teal-700">
-                        <button onclick="location.reload()" class="w-full flex items-center text-teal-200 hover:text-white p-2">
-                            <i class="fa-solid fa-right-from-bracket w-6"></i> Salir
-                        </button>
-                    </div>
-                </aside>
-
-                <!-- Área de Contenido Principal -->
-                <main class="flex-1 overflow-y-auto bg-gray-50 p-8" id="main-content">
-                    ${getTabContent()}
-                </main>
-            </div>`;
-            document.getElementById('app-container').innerHTML = html;
-        }
-
-        window.changeTab = function(tab) {
-            currentTab = tab;
-            renderDashboard();
-        }
-
-        function getTabContent() {
-            switch(currentTab) {
-                case 'citas': return renderCitas();
-                case 'pacientes': return renderPacientes();
-                case 'colaboradores': return renderColaboradores();
-                case 'paquetes': return renderPaquetes();
-                default: return renderCitas();
-            }
-        }
-
-        // --- SECCIÓN PACIENTES E HISTORIAL CLÍNICO ---
-        function renderPacientes() {
-            return `
-            <div class="fade-in">
+            <!-- VISTA: PACIENTES -->
+            <section id="view-pacientes" class="view-section">
                 <div class="flex justify-between items-center mb-6">
-                    <h2 class="text-2xl font-bold text-gray-800">Directorio de Pacientes</h2>
-                    <button onclick="openAddPaciente()" class="bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 font-semibold shadow">
-                        <i class="fa-solid fa-plus mr-2"></i>Nuevo Paciente
-                    </button>
+                    <h2 class="text-2xl font-bold text-gray-800"><i class="fa-solid fa-users mr-2 text-teal-600"></i>Pacientes</h2>
+                    <button onclick="abrirModalPaciente()" class="bg-teal-600 text-white px-4 py-2 rounded-xl font-bold shadow-md text-sm"><i class="fa-solid fa-plus"></i></button>
                 </div>
-                <div class="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-100">
+                <div id="pacientes-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+            </section>
+
+            <!-- VISTA: FISIOS -->
+            <section id="view-fisios" class="view-section">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-2xl font-bold text-gray-800"><i class="fa-solid fa-user-doctor mr-2 text-teal-600"></i>Terapeutas</h2>
+                    <button onclick="abrirModalFisio()" class="bg-teal-600 text-white px-4 py-2 rounded-xl font-bold shadow-md text-sm"><i class="fa-solid fa-plus"></i></button>
+                </div>
+                <div id="fisios-list" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+            </section>
+
+            <!-- VISTA: PAQUETES -->
+            <section id="view-paquetes" class="view-section">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-2xl font-bold text-gray-800"><i class="fa-solid fa-box-open mr-2 text-teal-600"></i>Paquetes</h2>
+                    <button onclick="abrirModalPaquete()" class="bg-teal-600 text-white px-4 py-2 rounded-xl font-bold shadow-md text-sm"><i class="fa-solid fa-plus"></i></button>
+                </div>
+                <div id="paquetes-list" class="grid grid-cols-1 sm:grid-cols-2 gap-4"></div>
+            </section>
+
+            <!-- VISTA: PAGOS (SOLO ADMIN) -->
+            <section id="view-pagos" class="view-section">
+                <h2 class="text-2xl font-bold text-gray-800 mb-6"><i class="fa-solid fa-money-bill-wave mr-2 text-teal-600"></i>Control de Pagos</h2>
+                <div class="bg-white rounded-xl shadow overflow-x-auto">
                     <table class="w-full text-left border-collapse">
                         <thead>
-                            <tr class="bg-gray-50 border-b">
-                                <th class="p-4 font-semibold text-gray-600">Nombre</th>
-                                <th class="p-4 font-semibold text-gray-600">Celular</th>
-                                <th class="p-4 font-semibold text-gray-600">Diagnóstico</th>
-                                <th class="p-4 font-semibold text-gray-600">Acciones</th>
+                            <tr class="bg-gray-100 text-gray-600 text-sm">
+                                <th class="p-4">Fecha</th>
+                                <th class="p-4">Paciente</th>
+                                <th class="p-4">Terapeuta</th>
+                                <th class="p-4">Sesión</th>
+                                <th class="p-4">Estatus</th>
                             </tr>
                         </thead>
-                        <tbody>
-                            ${patients.length === 0 ? `<tr><td colspan="4" class="p-8 text-center text-gray-400">No hay pacientes registrados</td></tr>` : ''}
-                            ${patients.map(p => `
-                                <tr class="border-b hover:bg-gray-50 transition">
-                                    <td class="p-4 font-medium text-gray-800">${p.name}</td>
-                                    <td class="p-4 text-gray-500">${p.phone}</td>
-                                    <td class="p-4 text-gray-500">${p.diagnosis || '-'}</td>
-                                    <td class="p-4">
-                                        <button onclick="openExpediente('${p.id}')" class="bg-teal-100 text-teal-700 px-3 py-1 rounded text-sm hover:bg-teal-200 font-semibold transition">
-                                            <i class="fa-solid fa-folder-open mr-1"></i> Expediente
-                                        </button>
-                                    </td>
-                                </tr>
-                            `).join('')}
-                        </tbody>
+                        <tbody id="pagos-tbody" class="text-sm"></tbody>
                     </table>
                 </div>
-            </div>`;
+            </section>
+
+        </main>
+
+        <!-- BARRA INFERIOR (MÓVIL) -->
+        <nav id="mobile-nav" class="fixed bottom-0 w-full bg-white shadow-[0_-2px_10px_rgba(0,0,0,0.1)] flex justify-around hidden z-50 pb-2 pt-2 border-t"></nav>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- MODALES Y SCRIPTS LÓGICOS -->
+    <!-- ========================================== -->
+    <div id="modal-container"></div>
+
+    <script>
+        let currentUser = null;
+        let numClinica = localStorage.getItem('numeroClinica') || "525512345678"; 
+        
+        let dbData = {
+            pacientes: [],
+            fisios: [],
+            paquetes: [],
+            citas: []
+        };
+
+        // --- SISTEMA DE INICIO DE SESIÓN ---
+        async function iniciarSesion() {
+            const input = document.getElementById('login-input').value.replace(/\s+/g, '');
+            if(!input) return alert("Ingresa un número o clave.");
+
+            if(input === "AdminCentro26!") {
+                currentUser = { role: 'admin', name: 'Administrador' };
+                ingresarApp();
+                return;
+            }
+
+            const fisio = dbData.fisios.find(f => f.phone === input);
+            if(fisio) {
+                currentUser = { role: 'fisio', ...fisio };
+                ingresarApp();
+                return;
+            }
+
+            const paciente = dbData.pacientes.find(p => p.phone === input);
+            if(paciente) {
+                currentUser = { role: 'paciente', ...paciente };
+                ingresarApp();
+                return;
+            }
+
+            alert("Número no registrado. Verifica tu número o pide a la clínica que te dé de alta.");
         }
 
-        window.openAddPaciente = function() {
-            const html = `
-            <div id="add-modal" class="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4 fade-in">
-                <div class="bg-white rounded-2xl w-full max-w-md p-6">
-                    <h2 class="text-xl font-bold text-gray-800 mb-4">Registrar Paciente</h2>
-                    <div class="space-y-4">
-                        <input type="text" id="new-pat-name" placeholder="Nombre completo" class="w-full p-3 border rounded-lg bg-gray-50 focus:outline-teal-500">
-                        <input type="number" id="new-pat-phone" placeholder="Celular (Será su contraseña)" class="w-full p-3 border rounded-lg bg-gray-50 focus:outline-teal-500">
-                        <div class="grid grid-cols-2 gap-4">
-                            <input type="text" id="new-pat-age" placeholder="Edad" class="w-full p-3 border rounded-lg bg-gray-50 focus:outline-teal-500">
-                            <input type="text" id="new-pat-diag" placeholder="Diagnóstico" class="w-full p-3 border rounded-lg bg-gray-50 focus:outline-teal-500">
+        function cerrarSesion() {
+            currentUser = null;
+            document.getElementById('app-screen').classList.add('hidden');
+            document.getElementById('login-screen').classList.remove('hidden');
+            document.getElementById('login-input').value = '';
+        }
+
+        async function ingresarApp() {
+            document.getElementById('login-screen').classList.add('hidden');
+            document.getElementById('app-screen').classList.remove('hidden');
+            document.getElementById('user-role-text').innerText = `Portal ${currentUser.role}`;
+            
+            await cargarDatosNube();
+            construirMenu();
+            cambiarVista('agenda');
+        }
+
+        // --- NAVEGACIÓN Y MENÚ ---
+        const menuConfig = {
+            admin: [
+                { id: 'agenda', icon: 'fa-calendar-check', text: 'Agenda' },
+                { id: 'pacientes', icon: 'fa-users', text: 'Pacientes' },
+                { id: 'fisios', icon: 'fa-user-doctor', text: 'Terapeutas' },
+                { id: 'paquetes', icon: 'fa-box-open', text: 'Paquetes' },
+                { id: 'pagos', icon: 'fa-money-bill-wave', text: 'Pagos' }
+            ],
+            fisio: [
+                { id: 'agenda', icon: 'fa-calendar-check', text: 'Mi Agenda' },
+                { id: 'pacientes', icon: 'fa-users', text: 'Pacientes' }
+            ],
+            paciente: [
+                { id: 'agenda', icon: 'fa-calendar-check', text: 'Mis Citas' },
+                { id: 'pacientes', icon: 'fa-notes-medical', text: 'Mi Expediente' } 
+            ]
+        };
+
+        function construirMenu() {
+            const links = menuConfig[currentUser.role];
+            const deskMenu = document.getElementById('nav-links-desktop');
+            const mobMenu = document.getElementById('mobile-nav');
+            deskMenu.innerHTML = ''; mobMenu.innerHTML = '';
+
+            links.forEach(link => {
+                deskMenu.innerHTML += `
+                    <button onclick="cambiarVista('${link.id}')" id="desk-btn-${link.id}" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-gray-600 hover:bg-teal-50 hover:text-teal-700 transition">
+                        <i class="fa-solid ${link.icon} w-5 text-center"></i> <span class="font-medium">${link.text}</span>
+                    </button>`;
+                mobMenu.innerHTML += `
+                    <button onclick="cambiarVista('${link.id}')" id="mob-btn-${link.id}" class="flex flex-col items-center p-2 text-gray-500 hover:text-teal-600 w-1/4">
+                        <i class="fa-solid ${link.icon} text-xl mb-1"></i> <span class="text-[10px] font-medium">${link.text}</span>
+                    </button>`;
+            });
+
+            document.getElementById('btn-ajustes').style.display = (currentUser.role === 'admin') ? 'block' : 'none';
+            document.getElementById('agenda-filters').style.display = (currentUser.role === 'admin') ? 'flex' : 'none';
+        }
+
+        function cambiarVista(viewId) {
+            document.querySelectorAll('.view-section').forEach(el => el.classList.remove('active'));
+            
+            if(currentUser.role === 'paciente' && viewId === 'pacientes') {
+                abrirExpediente(currentUser.id);
+            } else {
+                document.getElementById(`view-${viewId}`).classList.add('active');
+            }
+
+            ['desk', 'mob'].forEach(prefix => {
+                document.querySelectorAll(`[id^="${prefix}-btn-"]`).forEach(btn => {
+                    btn.classList.remove('text-teal-700', 'bg-teal-50');
+                    if(btn.id.includes(viewId)) btn.classList.add('text-teal-700', 'bg-teal-50');
+                });
+            });
+
+            if(viewId === 'agenda') renderAgenda();
+            if(viewId === 'pacientes') renderPacientes();
+            if(viewId === 'fisios') renderFisios();
+            if(viewId === 'paquetes') renderPaquetes();
+            if(viewId === 'pagos') renderPagos();
+        }
+
+        // --- CARGA Y GUARDADO DE DATOS (FIREBASE + LOCAL) ---
+        async function cargarDatosNube() {
+            if(db) {
+                try {
+                    const [c, p, f, paq] = await Promise.all([
+                        db.collection("citas").get(),
+                        db.collection("pacientes").get(),
+                        db.collection("fisios").get(),
+                        db.collection("paquetes").get()
+                    ]);
+                    dbData.citas = c.docs.map(d=>({id:d.id, ...d.data()}));
+                    dbData.pacientes = p.docs.map(d=>({id:d.id, ...d.data()}));
+                    dbData.fisios = f.docs.map(d=>({id:d.id, ...d.data()}));
+                    dbData.paquetes = paq.docs.map(d=>({id:d.id, ...d.data()}));
+                } catch(e) { console.log("Error cargando de BD, usando local.", e); }
+            }
+            const sFisio = document.getElementById('filter-fisio');
+            if(sFisio) {
+                sFisio.innerHTML = '<option value="">Todos los Terapeutas</option>' + dbData.fisios.map(f=>`<option value="${f.name}">${f.name}</option>`).join('');
+            }
+        }
+
+        async function guardarEnBD(coleccion, datos, id = null) {
+            const docId = id || Date.now().toString();
+            datos.id = docId;
+            const index = dbData[coleccion].findIndex(x => x.id === docId);
+            if(index > -1) dbData[coleccion][index] = datos;
+            else dbData[coleccion].push(datos);
+
+            if(db) await db.collection(coleccion).doc(docId).set(datos);
+            return docId;
+        }
+
+        // --- MÓDULO: AGENDA ---
+        function limpiarFiltrosAgenda() {
+            const fd = document.getElementById('filter-date');
+            const ff = document.getElementById('filter-fisio');
+            if(fd) fd.value = '';
+            if(ff) ff.value = '';
+            renderAgenda();
+        }
+
+        function renderAgenda() {
+            const cont = document.getElementById('citas-container');
+            const fDate = document.getElementById('filter-date') ? document.getElementById('filter-date').value : '';
+            const fFisio = document.getElementById('filter-fisio') ? document.getElementById('filter-fisio').value : '';
+
+            let citas = dbData.citas.filter(c => {
+                if(currentUser.role === 'fisio' && c.fisioName !== currentUser.name) return false;
+                if(currentUser.role === 'paciente' && c.patientId !== currentUser.id) return false;
+                if(fDate && c.date !== fDate) return false;
+                if(fFisio && c.fisioName !== fFisio) return false;
+                return true;
+            });
+
+            citas.sort((a,b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
+            const grouped = {};
+            citas.forEach(c => {
+                if(!grouped[c.date]) grouped[c.date] = [];
+                grouped[c.date].push(c);
+            });
+
+            cont.innerHTML = '';
+            if(Object.keys(grouped).length === 0) {
+                cont.innerHTML = `<div class="text-center text-gray-400 py-10"><i class="fa-solid fa-calendar-xmark text-4xl mb-3 block"></i>No hay citas agendadas</div>`;
+                return;
+            }
+
+            for(const date in grouped) {
+                const dayDiv = document.createElement('div');
+                dayDiv.innerHTML = `<h3 class="font-bold text-teal-800 mb-3 border-b pb-1 px-1 mt-4"><i class="fa-regular fa-calendar text-sm mr-2"></i>${date}</h3>`;
+                
+                grouped[date].forEach(cita => {
+                    const card = document.createElement('div');
+                    card.className = `bg-white p-4 rounded-xl shadow-sm border-l-4 ${cita.completed ? 'border-gray-400 opacity-75' : 'border-teal-500'} flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-3`;
+                    
+                    const msgWs = encodeURIComponent(`Hola ${cita.patientName}, el Centro del Dolor te recuerda tu cita el ${cita.date} a las ${cita.time}.`);
+                    
+                    let actionBtns = '';
+                    if(currentUser.role === 'admin') {
+                        actionBtns = `
+                            <button onclick="window.open('https://wa.me/52${cita.patientPhone}?text=${msgWs}')" class="bg-green-500 text-white px-3 py-1.5 rounded-lg text-sm hover:bg-green-600"><i class="fa-brands fa-whatsapp"></i> Recordar</button>
+                            <button onclick="abrirEdicionCita('${cita.id}')" class="bg-blue-500 text-white px-3 py-1.5 rounded-lg text-sm hover:bg-blue-600"><i class="fa-solid fa-pen"></i> Editar</button>
+                            ${!cita.completed ? `<button onclick="marcarCompletada('${cita.id}')" class="bg-purple-600 text-white px-3 py-1.5 rounded-lg text-sm hover:bg-purple-700"><i class="fa-solid fa-check-double"></i> Fin Sesión</button>` : `<span class="text-xs text-gray-500 font-bold"><i class="fa-solid fa-check"></i> Terminada</span>`}
+                        `;
+                    } else if (currentUser.role === 'fisio') {
+                        actionBtns = !cita.completed ? `<button onclick="marcarCompletada('${cita.id}')" class="bg-purple-600 text-white px-3 py-1.5 rounded-lg text-sm hover:bg-purple-700"><i class="fa-solid fa-check-double"></i> Fin Sesión</button>` : `<span class="text-xs text-gray-500 font-bold">Terminada</span>`;
+                    } else {
+                        // Paciente
+                        const msgClinica = encodeURIComponent(`Hola Centro del Dolor, confirmo mi cita para el ${cita.date} a las ${cita.time}.`);
+                        actionBtns = `<button onclick="window.open('https://wa.me/${numClinica}?text=${msgClinica}')" class="bg-green-500 text-white px-3 py-1.5 rounded-lg text-sm hover:bg-green-600 w-full"><i class="fa-brands fa-whatsapp"></i> Avisar Clínica</button>`;
+                    }
+
+                    card.innerHTML = `
+                        <div class="flex-1">
+                            <p class="font-bold text-lg">${cita.time} <span class="text-sm font-normal text-gray-500 ml-2">${currentUser.role==='paciente' ? cita.fisioName : cita.patientName}</span></p>
+                            ${cita.sessionNum ? `<p class="text-xs text-teal-600 font-bold mt-1 bg-teal-50 inline-block px-2 py-0.5 rounded">Sesión ${cita.sessionNum}</p>` : ''}
                         </div>
-                        <textarea id="new-pat-hist" placeholder="Antecedentes (Alergias, cirugías...)" class="w-full p-3 border rounded-lg bg-gray-50 focus:outline-teal-500 h-24"></textarea>
-                        
-                        <div class="flex justify-end gap-2 pt-2">
-                            <button onclick="document.getElementById('add-modal').remove()" class="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded-lg">Cancelar</button>
-                            <button onclick="guardarPaciente()" class="px-4 py-2 bg-teal-600 text-white font-bold rounded-lg hover:bg-teal-700 shadow">Guardar</button>
+                        <div class="flex flex-wrap gap-2 w-full md:w-auto mt-2 md:mt-0 justify-end">
+                            ${actionBtns}
+                        </div>
+                    `;
+                    dayDiv.appendChild(card);
+                });
+                cont.appendChild(dayDiv);
+            }
+        }
+
+        function abrirEdicionCita(id) {
+            const cita = dbData.citas.find(c => c.id === id);
+            if(!cita) return;
+
+            const html = `
+                <div id="add-modal" class="fixed inset-0 modal-bg flex justify-center items-center z-50">
+                    <div class="bg-white w-full max-w-sm rounded-2xl p-6 shadow-2xl">
+                        <h2 class="text-xl font-bold mb-4 text-teal-800">Reprogramar Cita</h2>
+                        <p class="text-sm mb-3 text-gray-600">Paciente: <b>${cita.patientName}</b></p>
+                        <div class="flex gap-3 mb-4">
+                            <input type="date" id="e-cita-d" value="${cita.date}" class="w-1/2 border p-3 rounded-lg bg-gray-50">
+                            <input type="time" id="e-cita-t" value="${cita.time}" class="w-1/2 border p-3 rounded-lg bg-gray-50">
+                        </div>
+                        <div class="flex gap-2">
+                            <button onclick="document.getElementById('add-modal').remove()" class="w-1/3 bg-gray-200 py-3 rounded-xl font-bold">Cancelar</button>
+                            <button onclick="guardarEdicionCita('${cita.id}')" class="w-2/3 bg-blue-600 text-white py-3 rounded-xl font-bold">Guardar y Avisar</button>
                         </div>
                     </div>
-                </div>
-            </div>`;
-            document.getElementById('modals').innerHTML = html;
+                </div>`;
+            document.getElementById('modal-container').innerHTML = html;
         }
 
-        window.guardarPaciente = async function() {
-            const name = document.getElementById('new-pat-name').value.trim();
-            const phone = document.getElementById('new-pat-phone').value.trim();
-            const age = document.getElementById('new-pat-age').value.trim();
-            const diag = document.getElementById('new-pat-diag').value.trim();
-            const hist = document.getElementById('new-pat-hist').value.trim();
+        async function guardarEdicionCita(id) {
+            const cita = dbData.citas.find(c => c.id === id);
+            cita.date = document.getElementById('e-cita-d').value;
+            cita.time = document.getElementById('e-cita-t').value;
             
-            if(!name || !phone) return alert("Nombre y celular obligatorios.");
-            
-            await setDoc(doc(db, "patients", phone), {
-                name, phone, age, diagnosis: diag, history: hist,
-                documents: [], // Arreglo para fotos de recetas/radiografías
-                registeredAt: new Date().toISOString()
-            });
+            await guardarEnBD('citas', cita, id);
             document.getElementById('add-modal').remove();
+            renderAgenda();
+            
+            const msgWs = encodeURIComponent(`Hola ${cita.patientName}, tu cita ha sido REPROGRAMADA para el ${cita.date} a las ${cita.time}.`);
+            window.open(`https://wa.me/52${cita.patientPhone}?text=${msgWs}`);
         }
 
-        window.openExpediente = function(id) {
-            const p = patients.find(x => x.id === id);
+        async function marcarCompletada(id) {
+            const cita = dbData.citas.find(c => c.id === id);
+            if(!cita) return;
+            cita.completed = true;
+            await guardarEnBD('citas', cita, id);
+
+            const pat = dbData.pacientes.find(p => p.id === cita.patientId);
+            if(pat && pat.activePkg) {
+                pat.pkgProgress = (pat.pkgProgress || 0) + 1;
+                await guardarEnBD('pacientes', pat, pat.id);
+            }
+            renderAgenda();
+        }
+
+        function abrirModalCita() {
+            const pOpts = dbData.pacientes.map(p => `<option value="${p.id}|${p.name}|${p.phone}">${p.name}</option>`).join('');
+            const fOpts = dbData.fisios.map(f => `<option value="${f.name}">${f.name}</option>`).join('');
+            
+            const html = `
+                <div id="add-modal" class="fixed inset-0 modal-bg flex justify-center items-end md:items-center z-50">
+                    <div class="bg-white w-full max-w-md md:rounded-2xl rounded-t-2xl p-6 shadow-2xl">
+                        <h2 class="text-xl font-bold mb-4 text-teal-800">Nueva Cita</h2>
+                        ${currentUser.role !== 'paciente' ? 
+                            `<select id="n-cita-p" class="w-full border p-3 rounded-lg mb-3 bg-gray-50"><option value="">Selecciona Paciente</option>${pOpts}</select>` 
+                            : `<input type="hidden" id="n-cita-p" value="${currentUser.id}|${currentUser.name}|${currentUser.phone}">`
+                        }
+                        <select id="n-cita-f" class="w-full border p-3 rounded-lg mb-3 bg-gray-50">
+                            ${currentUser.role === 'fisio' ? `<option value="${currentUser.name}">${currentUser.name}</option>` : `<option value="">Selecciona Terapeuta</option>${fOpts}`}
+                        </select>
+                        <div class="flex gap-3 mb-4">
+                            <input type="date" id="n-cita-d" class="w-1/2 border p-3 rounded-lg bg-gray-50">
+                            <input type="time" id="n-cita-t" class="w-1/2 border p-3 rounded-lg bg-gray-50">
+                        </div>
+                        <div class="flex gap-2">
+                            <button onclick="document.getElementById('add-modal').remove()" class="w-1/3 bg-gray-200 py-3 rounded-xl font-bold text-gray-700">Cancelar</button>
+                            <button onclick="guardarNuevaCita()" class="w-2/3 bg-teal-600 text-white py-3 rounded-xl font-bold shadow-md">Guardar Cita</button>
+                        </div>
+                    </div>
+                </div>`;
+            document.getElementById('modal-container').innerHTML = html;
+        }
+
+        async function guardarNuevaCita() {
+            const pv = document.getElementById('n-cita-p').value;
+            const fv = document.getElementById('n-cita-f').value;
+            const d = document.getElementById('n-cita-d').value;
+            const t = document.getElementById('n-cita-t').value;
+            if(!pv || !fv || !d || !t) return alert("Completa todos los campos");
+            const [pId, pName, pPhone] = pv.split('|');
+            
+            const pat = dbData.pacientes.find(p => p.id === pId);
+            let sessionNum = '';
+            if(pat && pat.activePkg) {
+                sessionNum = `${(pat.pkgProgress || 0) + 1} de ${pat.pkgTotal}`;
+            }
+
+            await guardarEnBD('citas', { patientId: pId, patientName: pName, patientPhone: pPhone, fisioName: fv, date: d, time: t, completed: false, statusPago: 'Pendiente', sessionNum: sessionNum });
+            document.getElementById('add-modal').remove();
+            renderAgenda();
+            if(currentUser.role === 'admin') renderPagos();
+        }
+
+        // --- MÓDULO: PACIENTES Y EXPEDIENTE ---
+        function renderPacientes() {
+            const list = document.getElementById('pacientes-list');
+            list.innerHTML = dbData.pacientes.map(p => `
+                <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-100 relative cursor-pointer hover:shadow-md transition" onclick="abrirExpediente('${p.id}')">
+                    <h3 class="font-bold text-gray-800 text-lg">${p.name}</h3>
+                    <p class="text-sm text-gray-500 mb-2"><i class="fa-solid fa-phone mr-1"></i> ${p.phone}</p>
+                    ${p.activePkg ? `<div class="w-full bg-gray-200 rounded-full h-2 mt-3"><div class="bg-teal-500 h-2 rounded-full" style="width: ${(p.pkgProgress/p.pkgTotal)*100}%"></div></div><p class="text-[10px] text-right mt-1 text-gray-500">${p.activePkg} - Visita ${p.pkgProgress} de ${p.pkgTotal}</p>` : ''}
+                </div>
+            `).join('');
+        }
+
+        function abrirExpediente(id) {
+            const p = dbData.pacientes.find(x => x.id === id);
             if(!p) return;
             
-            const pDocs = p.documents || [];
+            const isPat = currentUser.role === 'paciente';
 
-            const html = `
-            <div id="exp-modal" class="fixed inset-0 bg-black bg-opacity-60 z-50 flex items-center justify-center p-4 fade-in">
-                <input type="hidden" id="exp-modal-id" value="${p.id}">
-                <div class="bg-white rounded-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto shadow-2xl">
-                    <div class="bg-teal-700 p-6 text-white flex justify-between items-center sticky top-0 z-10">
-                        <div>
-                            <h2 class="text-2xl font-bold">${p.name}</h2>
-                            <p class="text-teal-200"><i class="fa-solid fa-phone mr-1"></i> ${p.phone}</p>
+            const modalHtml = `
+                <div id="exp-modal" class="fixed inset-0 modal-bg flex items-center justify-center z-50 p-2">
+                    <div class="bg-white w-full max-w-2xl h-[90vh] rounded-2xl shadow-xl flex flex-col overflow-hidden animate-fade-in">
+                        <div class="p-4 bg-teal-700 text-white flex justify-between items-center shrink-0">
+                            <h2 class="font-bold text-lg">${isPat ? 'Mi Expediente' : 'Expediente: ' + p.name}</h2>
+                            <button onclick="document.getElementById('exp-modal').remove()" class="text-white bg-teal-800 p-2 rounded-lg hover:bg-teal-900"><i class="fa-solid fa-xmark"></i></button>
                         </div>
-                        <button onclick="document.getElementById('exp-modal').remove()" class="text-white hover:text-red-200 text-2xl"><i class="fa-solid fa-times"></i></button>
-                    </div>
-                    
-                    <div class="p-6 space-y-6">
-                        <!-- Datos Clínicos -->
-                        <div class="bg-blue-50 p-4 rounded-lg border border-blue-100">
-                            <h3 class="font-bold text-blue-800 mb-3"><i class="fa-solid fa-notes-medical mr-2"></i>Datos Clínicos Generales</h3>
-                            <div class="grid grid-cols-2 gap-4">
-                                <div><p class="text-xs text-blue-600 font-bold uppercase">Edad</p><p class="text-gray-700">${p.age || 'No especificada'}</p></div>
-                                <div><p class="text-xs text-blue-600 font-bold uppercase">Diagnóstico</p><p class="text-gray-700">${p.diagnosis || 'No especificado'}</p></div>
-                            </div>
-                            <div class="mt-3"><p class="text-xs text-blue-600 font-bold uppercase">Antecedentes</p><p class="text-gray-700 text-sm">${p.history || 'Ninguno registrado'}</p></div>
-                        </div>
-
-                        <!-- Documentos (Recetas y Radiografías) -->
-                        <div class="bg-gray-50 p-4 rounded-lg border border-gray-200">
-                            <div class="flex justify-between items-center mb-4">
-                                <h3 class="font-bold text-gray-800"><i class="fa-solid fa-x-ray mr-2 text-teal-600"></i>Radiografías y Recetas</h3>
-                                
-                                <input type="file" id="file-upload-${p.id}" accept="image/*" class="hidden" onchange="subirDocumentoPaciente(event, '${p.id}')">
-                                <label for="file-upload-${p.id}" id="label-upload-${p.id}" class="cursor-pointer bg-teal-100 text-teal-700 px-4 py-2 rounded-lg font-semibold text-sm hover:bg-teal-200 transition">
-                                    <i class="fa-solid fa-cloud-arrow-up mr-1"></i> Añadir Foto
-                                </label>
-                            </div>
+                        <div class="p-5 overflow-y-auto flex-1 bg-gray-50 space-y-6">
                             
-                            <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                                ${pDocs.length === 0 ? `<p class="col-span-full text-gray-400 text-sm text-center py-4">No hay documentos guardados</p>` : ''}
-                                ${pDocs.map((docImg, idx) => `
-                                    <div class="relative group rounded-lg overflow-hidden border-2 border-gray-200 shadow-sm aspect-square bg-white flex items-center justify-center">
-                                        <img src="${docImg.url}" class="w-full h-full object-cover cursor-pointer hover:opacity-75 transition" onclick="verImagenCompleta('${docImg.url}')">
-                                        <button onclick="borrarDocumento('${p.id}', ${idx})" class="absolute top-1 right-1 bg-red-500 text-white rounded-full w-8 h-8 flex items-center justify-center opacity-0 group-hover:opacity-100 transition shadow">
-                                            <i class="fa-solid fa-trash text-sm"></i>
-                                        </button>
-                                    </div>
-                                `).join('')}
+                            <!-- Paquete Activo -->
+                            <div class="bg-white p-4 rounded-xl shadow-sm border">
+                                <div class="flex justify-between items-center mb-2">
+                                    <h3 class="font-bold text-gray-700">Tratamiento Actual</h3>
+                                    ${!isPat ? `<button onclick="asignarPaquete('${p.id}')" class="text-xs bg-teal-100 text-teal-700 px-2 py-1 rounded font-bold">Asignar</button>` : ''}
+                                </div>
+                                ${p.activePkg ? `
+                                    <p class="text-sm font-semibold text-teal-700 mb-1">${p.activePkg}</p>
+                                    <div class="w-full bg-gray-200 rounded-full h-3"><div class="bg-teal-500 h-3 rounded-full" style="width: ${(p.pkgProgress/p.pkgTotal)*100}%"></div></div>
+                                    <p class="text-xs text-right mt-1 text-gray-500">Sesión ${p.pkgProgress} de ${p.pkgTotal}</p>
+                                ` : '<p class="text-sm text-gray-500">Sin paquete asignado.</p>'}
                             </div>
-                        </div>
 
-                        <div class="text-center pt-4">
-                            <button onclick="document.getElementById('exp-modal').remove()" class="bg-gray-200 text-gray-700 px-8 py-3 rounded-xl font-bold hover:bg-gray-300">Cerrar Expediente</button>
+                            <!-- Notas / Diario -->
+                            <div class="bg-white p-4 rounded-xl shadow-sm border">
+                                <h3 class="font-bold text-gray-700 mb-2">Notas y Evolución</h3>
+                                <textarea id="nota-txt" placeholder="Agregar nueva nota o evolución..." class="w-full border p-2 rounded-lg text-sm mb-2 h-20"></textarea>
+                                <button onclick="agregarNota('${p.id}')" class="bg-gray-800 text-white px-4 py-2 rounded-lg text-sm mb-3">Guardar Nota</button>
+                                <div class="space-y-2 max-h-40 overflow-y-auto" id="notas-list">
+                                    ${(p.notes||[]).reverse().map(n => `<div class="bg-gray-50 p-2 rounded text-sm"><span class="text-xs text-teal-600 block font-bold">${n.date}</span>${n.text}</div>`).join('')}
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
-            </div>`;
-            document.getElementById('modals').innerHTML = html;
+            `;
+            document.getElementById('modal-container').innerHTML = modalHtml;
         }
 
-        // COMPRESOR DE IMÁGENES Y SUBIDA
-        window.subirDocumentoPaciente = function(event, patientId) {
-            const file = event.target.files[0];
-            if (!file) return;
+        async function agregarNota(id) {
+            const txt = document.getElementById('nota-txt').value;
+            if(!txt) return;
+            const p = dbData.pacientes.find(x => x.id === id);
+            if(!p.notes) p.notes = [];
+            p.notes.push({ text: txt, date: new Date().toLocaleDateString() });
+            await guardarEnBD('pacientes', p, id);
+            abrirExpediente(id);
+        }
 
-            const labelBtn = document.getElementById(`label-upload-${patientId}`);
-            labelBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Subiendo...';
-            labelBtn.classList.add('opacity-50', 'cursor-not-allowed');
+        function asignarPaquete(id) {
+            const opts = dbData.paquetes.map(pq => `<option value="${pq.name}|${pq.sessions}">${pq.name} (${pq.sessions} sesiones)</option>`).join('');
+            
+            const m = document.createElement('div');
+            m.className = "fixed inset-0 bg-black bg-opacity-50 z-[60] flex items-center justify-center p-4";
+            m.innerHTML = `
+                <div class="bg-white p-6 rounded-xl w-full max-w-sm text-center">
+                    <h3 class="font-bold mb-4">Asignar Tratamiento</h3>
+                    <select id="sel-paq" class="w-full border p-2 rounded-lg mb-4 text-sm">${opts}</select>
+                    <div class="flex gap-2 justify-center">
+                        <button onclick="this.parentElement.parentElement.parentElement.remove()" class="bg-gray-200 px-4 py-2 rounded-lg">Cancelar</button>
+                        <button onclick="guardarAsignacionPaquete('${id}', this)" class="bg-teal-600 text-white px-4 py-2 rounded-lg font-bold">Guardar</button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(m);
+        }
 
+        async function guardarAsignacionPaquete(id, btn) {
+            const val = btn.parentElement.parentElement.querySelector('#sel-paq').value;
+            if(!val) return;
+            const [name, tot] = val.split('|');
+            const p = dbData.pacientes.find(x => x.id === id);
+            p.activePkg = name;
+            p.pkgTotal = parseInt(tot);
+            p.pkgProgress = 0;
+            await guardarEnBD('pacientes', p, id);
+            btn.parentElement.parentElement.parentElement.remove();
+            abrirExpediente(id);
+            if(currentUser.role === 'admin') renderPacientes();
+        }
+
+        function abrirModalPaciente() {
+            document.getElementById('modal-container').innerHTML = `
+                <div id="add-modal" class="fixed inset-0 modal-bg flex justify-center items-center z-50"><div class="bg-white w-full max-w-sm rounded-2xl p-6"><h2 class="font-bold mb-4">Nuevo Paciente</h2><input type="text" id="pa-nom" placeholder="Nombre Completo" class="w-full border p-2 rounded mb-2"><input type="text" id="pa-tel" placeholder="Celular (Acceso)" class="w-full border p-2 rounded mb-4"><div class="flex gap-2"><button onclick="document.getElementById('add-modal').remove()" class="w-1/2 bg-gray-200 py-2 rounded font-bold">Cancelar</button><button onclick="guardarPaciente()" class="w-1/2 bg-teal-600 text-white py-2 rounded font-bold">Guardar</button></div></div></div>`;
+        }
+        async function guardarPaciente() {
+            await guardarEnBD('pacientes', { name: document.getElementById('pa-nom').value, phone: document.getElementById('pa-tel').value });
+            document.getElementById('add-modal').remove(); renderPacientes();
+        }
+
+        // --- MÓDULO: FISIOS ---
+        function compressImage(file, callback) {
             const reader = new FileReader();
-            reader.onload = function(e) {
-                const img = new Image();
-                img.onload = async function() {
-                    // Comprimir la imagen usando un Canvas
-                    const canvas = document.createElement('canvas');
-                    let width = img.width;
-                    let height = img.height;
-                    const max_size = 800; // Reducir a máximo 800px para que no llene Firebase
-                    
-                    if (width > height && width > max_size) {
-                        height *= max_size / width;
-                        width = max_size;
-                    } else if (height > max_size) {
-                        width *= max_size / height;
-                        height = max_size;
-                    }
-                    
-                    canvas.width = width;
-                    canvas.height = height;
-                    const ctx = canvas.getContext('2d');
-                    ctx.drawImage(img, 0, 0, width, height);
-                    
-                    // Convertir a texto Base64 comprimido (calidad 70%)
-                    const compressedBase64 = canvas.toDataURL('image/jpeg', 0.7);
-                    
-                    // Guardar en la base de datos
-                    const p = patients.find(x => x.id === patientId);
-                    let docs = p.documents || [];
-                    docs.push({ url: compressedBase64, date: new Date().toISOString() });
-                    
-                    await updateDoc(doc(db, "patients", patientId), { documents: docs });
-                    // No necesitamos recargar el modal manualmente, onSnapshot lo hará automáticamente
-                };
-                img.src = e.target.result;
-            };
             reader.readAsDataURL(file);
-        }
-
-        window.borrarDocumento = async function(patientId, docIndex) {
-            if(confirm("¿Seguro que deseas eliminar esta imagen del historial?")) {
-                const p = patients.find(x => x.id === patientId);
-                let docs = p.documents || [];
-                docs.splice(docIndex, 1); // Quitar imagen del arreglo
-                await updateDoc(doc(db, "patients", patientId), { documents: docs });
-            }
-        }
-
-        window.verImagenCompleta = function(urlBase64) {
-            const html = `
-            <div id="full-image-modal" class="fixed inset-0 bg-black bg-opacity-90 z-[60] flex items-center justify-center p-4 fade-in">
-                <button onclick="document.getElementById('full-image-modal').remove()" class="absolute top-6 right-6 text-white text-4xl hover:text-gray-300"><i class="fa-solid fa-xmark"></i></button>
-                <img src="${urlBase64}" class="max-w-full max-h-full object-contain rounded shadow-2xl">
-            </div>`;
-            document.getElementById('image-viewer').innerHTML = html;
-        }
-
-        // --- SECCIÓN COLABORADORES ---
-        function renderColaboradores() {
-            return `
-            <div class="fade-in">
-                <div class="flex justify-between items-center mb-6">
-                    <h2 class="text-2xl font-bold text-gray-800">Equipo de Terapeutas</h2>
-                    <button onclick="openAddColaborador()" class="bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 font-semibold shadow">
-                        <i class="fa-solid fa-user-plus mr-2"></i>Añadir Terapeuta
-                    </button>
-                </div>
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    ${collaborators.length === 0 ? `<p class="col-span-full text-gray-400 text-center py-8">Aún no hay colaboradores registrados.</p>` : ''}
-                    ${collaborators.map(c => `
-                        <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex flex-col items-center text-center transition hover:shadow-md">
-                            <img src="${c.photo || 'https://cdn-icons-png.flaticon.com/512/149/149071.png'}" alt="Foto" class="w-24 h-24 rounded-full object-cover mb-4 shadow-sm border-2 border-teal-100">
-                            <h3 class="text-lg font-bold text-gray-800">${c.name}</h3>
-                            <p class="text-teal-600 font-medium text-sm mb-2">${c.specialty}</p>
-                            <p class="text-gray-500 text-xs mb-4"><i class="fa-solid fa-phone mr-1"></i> ${c.phone}</p>
-                            <button onclick="eliminarDoc('collaborators', '${c.id}')" class="text-red-500 hover:text-red-700 text-sm font-semibold"><i class="fa-solid fa-trash mr-1"></i> Eliminar</button>
-                        </div>
-                    `).join('')}
-                </div>
-            </div>`;
-        }
-
-        window.openAddColaborador = function() {
-            const html = `
-            <div id="add-colab-modal" class="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4 fade-in">
-                <div class="bg-white rounded-2xl w-full max-w-md p-6">
-                    <h2 class="text-xl font-bold text-gray-800 mb-4">Registrar Terapeuta</h2>
-                    <div class="space-y-4 text-sm">
-                        <div class="flex flex-col items-center justify-center border-2 border-dashed border-gray-300 rounded-lg p-4 bg-gray-50">
-                            <i class="fa-solid fa-camera text-3xl text-gray-400 mb-2"></i>
-                            <p class="text-gray-500 font-semibold mb-2">Sube una foto de perfil</p>
-                            <input type="file" id="colab-photo" accept="image/*" class="text-xs text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-teal-50 file:text-teal-700 hover:file:bg-teal-100">
-                        </div>
-                        <input type="text" id="colab-name" placeholder="Nombre completo" class="w-full p-3 border rounded-lg focus:outline-teal-500">
-                        <input type="number" id="colab-phone" placeholder="Celular (Su contraseña de acceso)" class="w-full p-3 border rounded-lg focus:outline-teal-500">
-                        <input type="text" id="colab-specialty" placeholder="Especialidad (Ej. Fisioterapeuta)" class="w-full p-3 border rounded-lg focus:outline-teal-500">
-                        
-                        <div class="flex justify-end gap-2 pt-4">
-                            <button onclick="document.getElementById('add-colab-modal').remove()" class="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded-lg">Cancelar</button>
-                            <button onclick="guardarColaborador()" class="px-4 py-2 bg-teal-600 text-white font-bold rounded-lg hover:bg-teal-700 shadow" id="btn-save-colab">Guardar</button>
-                        </div>
-                    </div>
-                </div>
-            </div>`;
-            document.getElementById('modals').innerHTML = html;
-        }
-
-        window.guardarColaborador = async function() {
-            const name = document.getElementById('colab-name').value.trim();
-            const phone = document.getElementById('colab-phone').value.trim();
-            const spec = document.getElementById('colab-specialty').value.trim();
-            const fileInput = document.getElementById('colab-photo');
-            const btn = document.getElementById('btn-save-colab');
-            
-            if(!name || !phone) return alert("Nombre y celular son obligatorios.");
-
-            btn.innerText = "Guardando..."; btn.disabled = true;
-
-            let photoBase64 = "";
-            if (fileInput.files && fileInput.files[0]) {
-                const file = fileInput.files[0];
-                const reader = new FileReader();
-                reader.onloadend = async function() {
-                    const img = new Image();
-                    img.onload = async function() {
-                        const canvas = document.createElement('canvas');
-                        let width = img.width, height = img.height;
-                        const max_size = 400; // Fotos de perfil más pequeñas
-                        if (width > height && width > max_size) { height *= max_size / width; width = max_size; }
-                        else if (height > max_size) { width *= max_size / height; height = max_size; }
-                        canvas.width = width; canvas.height = height;
-                        canvas.getContext('2d').drawImage(img, 0, 0, width, height);
-                        photoBase64 = canvas.toDataURL('image/jpeg', 0.7);
-                        await saveColabToDb(phone, name, spec, photoBase64);
-                    }
-                    img.src = reader.result;
+            reader.onload = event => {
+                const img = new Image();
+                img.src = event.target.result;
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    const scale = Math.min(200 / img.width, 200 / img.height);
+                    canvas.width = img.width * scale;
+                    canvas.height = img.height * scale;
+                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                    callback(canvas.toDataURL('image/jpeg', 0.6));
                 }
-                reader.readAsDataURL(file);
-            } else {
-                await saveColabToDb(phone, name, spec, photoBase64);
-            }
+            };
         }
 
-        async function saveColabToDb(phone, name, spec, photoData) {
-            await setDoc(doc(db, "collaborators", phone), {
-                name: name,
-                phone: phone,
-                specialty: spec,
-                photo: photoData,
-                role: 'therapist'
-            });
-            document.getElementById('add-colab-modal').remove();
-        }
-
-        // --- SECCIÓN PAQUETES ---
-        function renderPaquetes() {
-            return `
-            <div class="fade-in">
-                <div class="flex justify-between items-center mb-6">
-                    <h2 class="text-2xl font-bold text-gray-800">Catálogo de Paquetes</h2>
-                    <button onclick="openAddPaquete()" class="bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 font-semibold shadow">
-                        <i class="fa-solid fa-plus mr-2"></i>Nuevo Paquete
-                    </button>
-                </div>
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    ${packages.length === 0 ? `<p class="col-span-full text-gray-400 text-center py-8">No hay paquetes en el catálogo.</p>` : ''}
-                    ${packages.map(p => `
-                        <div class="bg-white rounded-xl shadow-sm border border-teal-100 overflow-hidden">
-                            <div class="bg-teal-50 p-4 border-b border-teal-100 flex justify-between items-center">
-                                <h3 class="font-bold text-teal-800">${p.name}</h3>
-                                <span class="bg-teal-600 text-white text-xs px-2 py-1 rounded-full font-bold">${p.sessions} Sesiones</span>
-                            </div>
-                            <div class="p-4">
-                                <p class="text-3xl font-bold text-gray-800 mb-4">$${p.price}</p>
-                                <button onclick="eliminarDoc('packages', '${p.id}')" class="w-full bg-red-50 text-red-600 py-2 rounded-lg text-sm font-semibold hover:bg-red-100 transition">
-                                    Eliminar Paquete
-                                </button>
-                            </div>
-                        </div>
-                    `).join('')}
-                </div>
-            </div>`;
-        }
-
-        window.openAddPaquete = function() {
-            const html = `
-            <div id="add-pkg-modal" class="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4 fade-in">
-                <div class="bg-white rounded-2xl w-full max-w-sm p-6">
-                    <h2 class="text-xl font-bold text-gray-800 mb-4">Crear Nuevo Paquete</h2>
-                    <div class="space-y-4">
-                        <input type="text" id="pkg-name" placeholder="Nombre (Ej. Paquete Básico)" class="w-full p-3 border rounded-lg focus:outline-teal-500">
-                        <input type="number" id="pkg-sessions" placeholder="Cantidad de Sesiones (Ej. 5)" class="w-full p-3 border rounded-lg focus:outline-teal-500">
-                        <input type="number" id="pkg-price" placeholder="Precio Total ($)" class="w-full p-3 border rounded-lg focus:outline-teal-500">
-                        
-                        <div class="flex justify-end gap-2 pt-2">
-                            <button onclick="document.getElementById('add-pkg-modal').remove()" class="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded-lg">Cancelar</button>
-                            <button onclick="guardarPaquete()" class="px-4 py-2 bg-teal-600 text-white font-bold rounded-lg hover:bg-teal-700 shadow">Guardar</button>
+        function abrirModalFisio() {
+            document.getElementById('modal-container').innerHTML = `
+                <div id="add-modal" class="fixed inset-0 modal-bg flex justify-center items-center z-50">
+                    <div class="bg-white w-full max-w-sm rounded-2xl p-6">
+                        <h2 class="font-bold mb-4">Añadir Terapeuta</h2>
+                        <input type="file" id="f-foto" accept="image/*" class="w-full mb-3 text-sm">
+                        <input type="text" id="f-nombre" placeholder="Nombre Completo" class="w-full border p-2 rounded mb-3">
+                        <input type="text" id="f-tel" placeholder="Celular (Acceso)" class="w-full border p-2 rounded mb-4">
+                        <div class="flex gap-2">
+                            <button onclick="document.getElementById('add-modal').remove()" class="w-1/2 bg-gray-200 py-2 rounded font-bold">Cancelar</button>
+                            <button onclick="guardarFisio()" class="w-1/2 bg-teal-600 text-white py-2 rounded font-bold">Guardar</button>
                         </div>
                     </div>
+                </div>`;
+        }
+
+        async function guardarFisio() {
+            const n = document.getElementById('f-nombre').value;
+            const t = document.getElementById('f-tel').value.replace(/\s+/g, '');
+            const file = document.getElementById('f-foto').files[0];
+            if(!n || !t) return alert("Falta nombre o teléfono");
+
+            const save = async (fotoB64) => {
+                await guardarEnBD('fisios', { name: n, phone: t, photo: fotoB64 });
+                document.getElementById('add-modal').remove();
+                renderFisios();
+            };
+
+            if(file) compressImage(file, save);
+            else save(null);
+        }
+
+        function renderFisios() {
+            document.getElementById('fisios-list').innerHTML = dbData.fisios.map(f => `
+                <div class="bg-white p-4 rounded-xl shadow-sm border flex items-center gap-4">
+                    <div class="w-16 h-16 rounded-full bg-gray-200 overflow-hidden shrink-0 flex items-center justify-center">
+                        ${f.photo ? `<img src="${f.photo}" class="w-full h-full object-cover">` : `<i class="fa-solid fa-user text-2xl text-gray-400"></i>`}
+                    </div>
+                    <div class="flex-1">
+                        <h3 class="font-bold text-gray-800">${f.name}</h3>
+                        <p class="text-sm text-gray-500">${f.phone}</p>
+                    </div>
+                    <button onclick="editarFisio('${f.id}')" class="text-blue-500 text-sm hover:underline font-bold">Editar</button>
                 </div>
-            </div>`;
-            document.getElementById('modals').innerHTML = html;
+            `).join('');
         }
 
-        window.guardarPaquete = async function() {
-            const name = document.getElementById('pkg-name').value.trim();
-            const sessions = document.getElementById('pkg-sessions').value.trim();
-            const price = document.getElementById('pkg-price').value.trim();
-            
-            if(!name || !sessions || !price) return alert("Llena todos los campos.");
-            
-            const pkgId = "PKG-" + Math.floor(Math.random() * 10000);
-            
-            await setDoc(doc(db, "packages", pkgId), {
-                name, sessions: parseInt(sessions), price: parseFloat(price)
-            });
-            document.getElementById('add-pkg-modal').remove();
-        }
-
-        // --- SECCIÓN CITAS ---
-        function renderCitas() {
-            return `
-            <div class="fade-in">
-                <h2 class="text-2xl font-bold text-gray-800 mb-6">Agenda de Citas</h2>
-                <div class="bg-white p-8 rounded-xl shadow-sm border border-gray-100 text-center">
-                    <i class="fa-regular fa-calendar-check text-5xl text-teal-200 mb-4"></i>
-                    <p class="text-gray-500 mb-4">El calendario interactivo se configurará en la siguiente fase.</p>
-                </div>
-            </div>`;
-        }
-
-        // Funciones Globales
-        window.eliminarDoc = async function(coleccion, id) {
-            if(confirm('¿Estás seguro de eliminar este registro?')) {
-                await deleteDoc(doc(db, coleccion, id));
+        function editarFisio(id) {
+            const f = dbData.fisios.find(x => x.id === id);
+            const nuevoNom = prompt("Editar Nombre:", f.name);
+            const nuevoTel = prompt("Editar Teléfono:", f.phone);
+            if(nuevoNom && nuevoTel) {
+                f.name = nuevoNom;
+                f.phone = nuevoTel.replace(/\s+/g, '');
+                guardarEnBD('fisios', f, id).then(() => renderFisios());
             }
         }
 
-        // Iniciar
-        initApp();
+        // --- PAQUETES Y PAGOS (Solo Admin) ---
+        function renderPaquetes() {
+            document.getElementById('paquetes-list').innerHTML = dbData.paquetes.map(p => `
+                <div class="bg-white p-4 rounded-xl border-l-4 border-teal-500 shadow-sm flex justify-between items-center">
+                    <div><h3 class="font-bold">${p.name}</h3><p class="text-sm text-gray-500">${p.sessions} Sesiones - $${p.price}</p></div>
+                </div>
+            `).join('');
+        }
+        
+        function abrirModalPaquete() {
+            document.getElementById('modal-container').innerHTML = `
+                <div id="add-modal" class="fixed inset-0 modal-bg flex justify-center items-center z-50"><div class="bg-white w-full max-w-sm rounded-2xl p-6"><h2 class="font-bold mb-4">Nuevo Paquete</h2><input type="text" id="p-nom" placeholder="Ej. Básico" class="w-full border p-2 rounded mb-2"><input type="number" id="p-ses" placeholder="Num. Sesiones" class="w-full border p-2 rounded mb-2"><input type="number" id="p-pre" placeholder="Precio ($)" class="w-full border p-2 rounded mb-4"><div class="flex gap-2"><button onclick="document.getElementById('add-modal').remove()" class="w-1/2 bg-gray-200 py-2 rounded font-bold">Cancelar</button><button onclick="guardarPaquete()" class="w-1/2 bg-teal-600 text-white py-2 rounded font-bold">Guardar</button></div></div></div>`;
+        }
+        
+        async function guardarPaquete() {
+            await guardarEnBD('paquetes', { name: document.getElementById('p-nom').value, sessions: document.getElementById('p-ses').value, price: document.getElementById('p-pre').value });
+            document.getElementById('add-modal').remove(); renderPaquetes();
+        }
+
+        function renderPagos() {
+            document.getElementById('pagos-tbody').innerHTML = dbData.citas.map(c => `
+                <tr class="border-b">
+                    <td class="p-4">${c.date}</td><td class="p-4 font-bold text-teal-700">${c.patientName}</td><td class="p-4">${c.fisioName}</td>
+                    <td class="p-4">${c.sessionNum || 'Única'}</td>
+                    <td class="p-4">
+                        <select onchange="actualizarPago('${c.id}', this.value)" class="border rounded p-1 text-sm ${c.statusPago==='Pagado'?'bg-green-100 text-green-700':c.statusPago==='Atrasado'?'bg-red-100 text-red-700':'bg-yellow-100 text-yellow-700'}">
+                            <option value="Pendiente" ${c.statusPago==='Pendiente'?'selected':''}>Pendiente</option>
+                            <option value="Pagado" ${c.statusPago==='Pagado'?'selected':''}>Pagado</option>
+                            <option value="Atrasado" ${c.statusPago==='Atrasado'?'selected':''}>Atrasado</option>
+                        </select>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        async function actualizarPago(id, status) {
+            const c = dbData.citas.find(x => x.id === id);
+            c.statusPago = status;
+            await guardarEnBD('citas', c, id); renderPagos();
+        }
+
+        function abrirAjustes() {
+            const nuevo = prompt("Ingresa el nuevo número de WhatsApp de la Clínica (10 dígitos):", numClinica.replace('52',''));
+            if(nuevo && nuevo.length >= 10) {
+                numClinica = '52' + nuevo.replace(/\s+/g, '');
+                localStorage.setItem('numeroClinica', numClinica);
+                alert("Número de clínica actualizado.");
+            }
+        }
     </script>
 </body>
 </html>
